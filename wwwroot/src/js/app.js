@@ -3,7 +3,7 @@
 //  Connects to ASP.NET Core Web API backend
 // ═══════════════════════════════════════════════════════════════
 
-const API = 'http://localhost:5119/api'; // ← change to your actual port
+const API = '/api'; // ← change to your actual port
 
 // ───────────────────────────────────────────────────────────────
 //  STATE
