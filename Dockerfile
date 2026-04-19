@@ -14,4 +14,4 @@ COPY --from=build /app/out .
 
 EXPOSE 80
 
-ENTRYPOINT ["dotnet", "SlsuAlumniApi.dll]
+ENTRYPOINT ["dotnet", "SlsuAlumniApi.dll"]
