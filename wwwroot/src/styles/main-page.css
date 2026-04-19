@@ -1,0 +1,86 @@
+﻿#main-page {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #F8FAFC;
+}
+.hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 30px;
+    gap: 10px;
+    max-width: 420px;
+    width: 100%;
+}
+
+
+.search-box {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+}
+
+    .search-box i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9CA3AF;
+    }
+
+#searchAlumni {
+    width: 100%;
+    padding: 10px 12px 10px 35px;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    background-color: white;
+    outline: none;
+    box-sizing: border-box;
+}
+
+    #searchAlumni:focus {
+        border-color: #2563EB;
+        background-color: #FFFFFF;
+    }
+
+.search-box:focus-within i {
+    color: #2563EB;
+}
+.search-box:focus-within {
+    transform: scale(1.02);
+    transition: 200ms ease;
+}
+.hero {
+    text-align: center;
+    padding: 30px 40px;
+    background-color: #FFFFFF;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+}
+.logo-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+    .logo-group img {
+        width: 55px;
+        height: 55px;
+        object-fit: cover;
+        border-radius: 10px;
+    }
+.hero h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.hero h4 {
+    margin: 0;
+    font-size: 13px;
+    color: #6B7280;
+    font-weight: 400;
+}

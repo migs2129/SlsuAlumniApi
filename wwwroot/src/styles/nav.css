@@ -1,0 +1,125 @@
+.header {
+    position: absolute;
+    top: 1px;
+    background: white;
+    display: flex;
+    justify-content: flex-start;
+    width: 100vw;
+    padding-top: 10px;
+    box-shadow: var(--modern-box-shadow);
+}
+.header img{
+    width:20vw;
+}
+.navigation{
+    position: relative;
+    display: flex;
+    width: 80vw;
+    left: 1px;
+
+ }
+.nav-content {
+    display: inline;
+    color: var(--custom-blue);
+    font-weight:500;
+    margin: 0 10px;
+    font-size: calc(120% - 4px);
+}
+
+.nav-content a{ 
+     color: var(--custom-blue);  
+     margin: 0 10px; 
+     text-decoration:none;
+
+}
+
+.nav-content:hover{
+    color: var(--custom-yellow);
+    cursor: pointer;
+    transition: all 200ms linear; 
+    text-decoration:underline;   
+}
+#btn-admin-login {
+    background-color: #293F79;
+    color: white;
+    margin-left: 1.5rem;
+    position: absolute;
+    display: inline;
+    font-weight: 500;
+    top: 10px;
+    right:10px;
+    padding: calc(2% - 4px);
+    border-radius: 15px;
+}
+#btn-admin-login:hover{
+    outline: 1px solid var(--custom-yellow);
+    background-color: var(--custom-yellow);
+    color: var(--custom-blue);
+    text-decoration: none;
+    cursor: pointer;
+    transition: 200ms linear;
+}
+footer {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: #FFFFFF;
+    border-top: 1px solid #E5E7EB;
+    z-index: 1000;
+}
+footer ul {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin: 0;
+    padding: 8px 0;
+    list-style: none;
+}
+footer li {
+    text-align: center;
+    font-size: 12px;
+    color: #6B7280;
+}
+footer li i {
+    display: block;
+    font-size: 18px;
+    margin-bottom: 3px;
+}
+footer li.active {
+    color: #2563EB;
+}
+    footer li.admin i {
+        background-color: #2563EB;
+        color: white;
+        width: 36px;
+        height: 36px;
+        line-height: 36px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    footer li {
+        padding: 6px 10px;
+        cursor: pointer;
+    }
+
+        footer li:active {
+            transform: scale(0.95);
+        }
+@media screen and (max-width: 900px){
+    .nav-content {
+        font-size: 11px;
+    }
+
+    #btn-admin-login{
+        display:none;
+    }
+
+    .header{
+        display:none;
+    }
+    footer{
+        display: block;
+    }
+}

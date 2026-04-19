@@ -1,0 +1,6 @@
+@SlsuAlumniApi_HostAddress = http://localhost:5119
+
+GET {{SlsuAlumniApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

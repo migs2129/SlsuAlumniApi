@@ -1,0 +1,16 @@
+:root {
+    --custom-blue: #183356;
+    --custom-yellow: #E7CE03;
+    --modern-box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --gradient-blue: linear-gradient(to bottom, #1e5799 0%,#2989d8 50%,#207cca 51%,#7db9e8 100%);
+    --gray-section: #E5E7EB;
+    --soft-gray-2: #F3F4F6;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    
+}
