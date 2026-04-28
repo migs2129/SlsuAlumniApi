@@ -576,14 +576,7 @@ if (mobileNav) {
 //  INIT
 // ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    loadSummary();
-    loadAlumni();
-    loadRme();
-});
-const empStats = document.querySelectorAll('.emp-stat');
-
-empStats.forEach((el, i) => {
-  setTimeout(() => {
-    el.classList.add('show');
-  }, i * 150); // stagger delay
+    loadSummary();   // hero counters
+    loadAlumni();    // batch boxes, field list, search data
+    loadRme();       // rme banner, year boxes, pass rate
 });
