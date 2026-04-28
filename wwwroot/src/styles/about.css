@@ -1,0 +1,86 @@
+﻿/* ═══ ABOUT ═══ */
+#about {
+    background: white;
+}
+
+.about-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+.about-card {
+    text-align: justify;
+    background: var(--gray-bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--gray-2);
+    padding: 1.5rem;
+}
+
+    .about-card h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--blue);
+        margin-bottom: 12px;
+    }
+
+    .about-card p {
+        color: var(--text-2);
+        line-height: 1.75;
+        font-size: 0.9rem;
+    }
+
+.info-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.info-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: white;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--gray-2);
+    padding: 12px 14px;
+}
+
+    .info-item .ii-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background: var(--blue);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+        .info-item .ii-icon i {
+            font-size: 14px;
+            color: white;
+        }
+
+    .info-item .ii-body .lbl {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--gray-text);
+    }
+
+    .info-item .ii-body .val {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--blue);
+        margin-top: 2px;
+    }
+
+        .info-item .ii-body .val a {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--blue);
+            margin-top: 2px;
+            text-decoration: none;
+        }

@@ -1,0 +1,73 @@
+﻿/* ═══ WEB FOOTER ═══ */
+.web-footer {
+    display: block;
+    background: var(--blue);
+    color: rgba(255,255,255,0.75);
+    padding: 3rem 1.5rem 1.5rem;
+}
+
+.web-footer-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+}
+
+.web-footer-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.wf-brand img {
+    height: 44px;
+    width: 44px;
+    object-fit: contain;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.wf-brand p {
+    font-size: 12px;
+    line-height: 1.7;
+    margin-top: 6px;
+}
+
+.wf-col h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 10px;
+}
+
+.wf-col ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+    .wf-col ul li {
+        font-size: 12px;
+        cursor: pointer;
+        transition: color 0.15s;
+    }
+
+        .wf-col ul li a {
+            font-size: 12px;
+            cursor: pointer;
+            transition: color 0.15s;
+            text-decoration: none;
+            color: rgba(255,255,255,0.75);
+        }
+
+        .wf-col ul li:hover {
+            color: white;
+        }
+
+.wf-bottom {
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 1rem;
+    text-align: center;
+    font-size: 11px;
+    opacity: 0.5;
+}

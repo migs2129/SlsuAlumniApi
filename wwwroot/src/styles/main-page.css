@@ -1,86 +1,183 @@
-﻿#main-page {
-    min-height: 100vh;
+﻿/* ═══ HERO / MAIN ═══ */
+#main-page {
+    min-height: calc(100vh - var(--nav-h));
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
-    background-color: #F8FAFC;
+    justify-content: center;
+    background: var(--gray-bg);
+    padding: 2rem 1.5rem 5rem;
+    gap: 2.5rem;
 }
-.hero {
+
+.hero-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    padding: 2.5rem 3rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: 30px;
-    gap: 10px;
-    max-width: 420px;
+    gap: 12px;
+    max-width: 460px;
     width: 100%;
 }
 
+.logo-group {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 4px;
+}
 
-.search-box {
+    .logo-group img {
+        width: 58px;
+        height: 58px;
+        object-fit: contain;
+        border-radius: 10px;
+    }
+
+.hero-card h2 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--blue);
+}
+
+.hero-card p {
+    font-size: 13px;
+    color: var(--gray-text);
+}
+
+/* search */
+.search-wrap {
     position: relative;
     width: 100%;
-    max-width: 320px;
+    max-width: 340px;
 }
 
-    .search-box i {
+    .search-wrap i {
         position: absolute;
         left: 12px;
         top: 50%;
         transform: translateY(-50%);
-        color: #9CA3AF;
+        color: var(--gray-3);
+        pointer-events: none;
+        transition: color 0.2s;
+    }
+
+    .search-wrap:focus-within i {
+        color: var(--blue-light);
     }
 
 #searchAlumni {
     width: 100%;
-    padding: 10px 12px 10px 35px;
-    border: 1px solid #E5E7EB;
-    border-radius: 8px;
-    background-color: white;
+    padding: 10px 12px 10px 36px;
+    border: 1.5px solid var(--gray-2);
+    border-radius: 10px;
+    background: var(--gray-1);
+    font-size: 14px;
     outline: none;
-    box-sizing: border-box;
+    transition: all 0.2s;
 }
 
     #searchAlumni:focus {
-        border-color: #2563EB;
-        background-color: #FFFFFF;
+        border-color: var(--blue-light);
+        background: white;
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.08);
     }
 
-.search-box:focus-within i {
-    color: #2563EB;
+.search-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--gray-2);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
 }
-.search-box:focus-within {
-    transform: scale(1.02);
-    transition: 200ms ease;
-}
-.hero {
-    text-align: center;
-    padding: 30px 40px;
-    background-color: #FFFFFF;
-    border-radius: 16px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
-}
-.logo-group {
+
+    .search-dropdown.open {
+        display: block;
+    }
+
+.search-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--gray-1);
+    transition: background 0.12s;
     display: flex;
-    gap: 10px;
-    justify-content: center;
+    flex-direction: column;
+    gap: 2px;
 }
 
-    .logo-group img {
-        width: 55px;
-        height: 55px;
-        object-fit: cover;
-        border-radius: 10px;
+    .search-item:last-child {
+        border-bottom: none;
     }
-.hero h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
+
+    .search-item:hover {
+        background: var(--gray-1);
+    }
+
+    .search-item .si-name {
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--text);
+    }
+
+    .search-item .si-sub {
+        font-size: 11px;
+        color: var(--gray-text);
+    }
+
+.search-no {
+    padding: 14px;
+    text-align: center;
+    color: var(--gray-text);
+    font-size: 13px;
 }
 
-.hero h4 {
-    margin: 0;
-    font-size: 13px;
-    color: #6B7280;
-    font-weight: 400;
+/* hero stats */
+.hero-stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+    max-width: 700px;
 }
+
+.hstat {
+    flex: 1;
+    min-width: 150px;
+    background: white;
+    border-radius: var(--radius);
+    border: 1px solid var(--gray-2);
+    padding: 1.25rem 1rem;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+}
+
+    .hstat .hs-icon {
+        font-size: 22px;
+        margin-bottom: 6px;
+    }
+
+    .hstat .hs-num {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--blue);
+    }
+
+    .hstat .hs-lbl {
+        font-size: 11px;
+        color: var(--gray-text);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 2px;
+    }

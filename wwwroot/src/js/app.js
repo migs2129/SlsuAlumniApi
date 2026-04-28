@@ -1,21 +1,20 @@
 ﻿// ═══════════════════════════════════════════════════════════════
 //  SLSU BSME Alumni Tracking System — app.js
-//  Connects to ASP.NET Core Web API backend
 // ═══════════════════════════════════════════════════════════════
 
-const API = 'http://localhost:5119/api'; // ← change to your actual port
+const API = '/api'; // ← change to your actual port
 
 // ───────────────────────────────────────────────────────────────
 //  STATE
 // ───────────────────────────────────────────────────────────────
 let allAlumni = [];
 let rmeData = null;
+let batchFilter = ''; // current year search term
+let examResultsData = [];
 
 // ───────────────────────────────────────────────────────────────
 //  UTILITIES
 // ───────────────────────────────────────────────────────────────
-
-/** Generic fetch wrapper — returns parsed JSON or null on error */
 async function apiFetch(path) {
     try {
         const res = await fetch(API + path);
@@ -27,58 +26,82 @@ async function apiFetch(path) {
     }
 }
 
-/** Show a loading spinner inside any container */
-function showLoading(containerId) {
-    const el = document.getElementById(containerId);
+function showLoading(id, msg = 'Loading data...') {
+    const el = document.getElementById(id);
     if (el) el.innerHTML = `
     <div class="load-state">
       <div class="spinner"></div>
-      <p>Loading data...</p>
+      <p>${msg}</p>
     </div>`;
 }
 
-/** Show an error message inside any container */
-function showError(containerId, message = 'Could not load data. Check your API connection.') {
-    const el = document.getElementById(containerId);
+function showError(id, msg = 'Could not load data. Check your API connection.') {
+    const el = document.getElementById(id);
     if (el) el.innerHTML = `
     <div class="load-state">
-      <p style="color:#dc2626;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${message}</p>
+      <p style="color:#dc2626;">
+        <i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i>${msg}
+      </p>
     </div>`;
 }
 
-/** Open / close modals */
-function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow = 'hidden'; }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); document.body.style.overflow = ''; }
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
 
-/** Smooth-scroll to a section */
+function openModal(id) {
+    document.getElementById(id).classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+    document.body.style.overflow = '';
+}
+
 function scrollTo(selector) {
     const el = document.querySelector(selector);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
 }
 
-// Close modals when clicking the backdrop
+// Close modals on backdrop click
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', e => {
         if (e.target === overlay) closeModal(overlay.id);
     });
 });
+document.querySelectorAll('.es-num').forEach(el => {
+    el.classList.remove('animate'); // reset
+    void el.offsetWidth; // force reflow
+    el.classList.add('animate');
+});
 
-// Close modals with Escape key
+const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add('show');
+        }
+    });
+}, { threshold: 0.2 });
+
+document.querySelectorAll('section, .hero-card, .hstat, .about-card')
+    .forEach(el => {
+        el.classList.add('fade-in');
+        observer.observe(el);
+    });
+
+// Close on Escape
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape')
         document.querySelectorAll('.modal-overlay.open').forEach(o => closeModal(o.id));
-    }
 });
 
 // ───────────────────────────────────────────────────────────────
-//  1. SUMMARY STATS  →  hero counters + emp panel
-//     GET /api/alumni/analytics/summary
-//     Returns: { totalAlumni, totalEmployed, totalRmePassers }
+//  1. SUMMARY STATS
 // ───────────────────────────────────────────────────────────────
 async function loadSummary() {
     const data = await apiFetch('/alumni/analytics/summary');
     if (!data) return;
-
     setText('stat-total', data.totalAlumni ?? '—');
     setText('stat-employed', data.totalEmployed ?? '—');
     setText('stat-licensed', data.totalRmePassers ?? '—');
@@ -86,16 +109,13 @@ async function loadSummary() {
 }
 
 // ───────────────────────────────────────────────────────────────
-//  2. ALL ALUMNI  →  search, batch boxes, field list
-//     GET /api/alumni
-//     Returns: Alumni[]
+//  2. ALL ALUMNI
 // ───────────────────────────────────────────────────────────────
 async function loadAlumni() {
     showLoading('batch-boxes');
     showLoading('field-list');
 
     const data = await apiFetch('/alumni');
-
     if (!data) {
         showError('batch-boxes');
         showError('field-list');
@@ -103,63 +123,119 @@ async function loadAlumni() {
     }
 
     allAlumni = data;
-
-    buildBatchBoxes();
+    renderBatchBoxes();  // initial render (no filter)
     buildFieldList();
 }
 
 // ───────────────────────────────────────────────────────────────
-//  3. RME DATA  →  banner, year boxes, emp pass rate
-//     GET /api/alumni/analytics/rme-passing-rate
-//     Returns: { totalTakers, totalPassers, totalFailed,
-//                overallPassingRate, byPasserStatus, byYear[] }
+//  3. RME DATA
 // ───────────────────────────────────────────────────────────────
 async function loadRme() {
     showLoading('rme-year-boxes');
 
-    const data = await apiFetch('/alumni/analytics/rme-passing-rate');
+    const data = await apiFetch('/examresults');
 
-    if (!data) {
+    if (!data || !data.length) {
         setText('rme-overall', 'N/A');
-        setText('rme-banner-sub', 'Could not load data.');
-        showError('rme-year-boxes');
+        setText('rme-banner-sub', 'No published exam results yet.');
+        showError('rme-year-boxes', 'No published board exam results found.');
         return;
     }
 
-    rmeData = data;
+    examResultsData = data;
 
-    // Banner
-    setText('rme-overall', `${data.overallPassingRate}%`);
-    setText('rme-banner-sub', `${data.totalPassers} passers out of ${data.totalTakers} takers`);
+    // Overall = weighted average of all published periods
+    const totalPassers = data.reduce((s, e) => s + e.slsuPassers, 0);
+    const totalExaminees = data.reduce((s, e) => s + e.slsuExaminees, 0);
+    const overallRate = totalExaminees > 0
+        ? (totalPassers / totalExaminees * 100).toFixed(2) : 0;
 
-    // Employment panel pass rate
-    setText('emp-pass-rate', `${data.overallPassingRate}%`);
+    setText('rme-overall', `${overallRate}%`);
+    setText('rme-banner-sub',
+        `${totalPassers} passers out of ${totalExaminees} examinees across all published periods`);
+    setText('emp-pass-rate', `${overallRate}%`);
 
-    // Year boxes
-    buildRmeYearBoxes();
+    buildExamResultBoxes();
 }
 
 // ───────────────────────────────────────────────────────────────
-//  BUILD: BATCH BOXES
+//  BATCH SEARCH — called by the input's oninput
 // ───────────────────────────────────────────────────────────────
-function buildBatchBoxes() {
+function onBatchSearch(value) {
+    batchFilter = value.trim();
+
+    // Show/hide the clear button
+    const clearBtn = document.getElementById('batch-clear-btn');
+    if (clearBtn) clearBtn.style.display = batchFilter ? 'inline-block' : 'none';
+
+    renderBatchBoxes();
+}
+
+function clearBatchSearch() {
+    batchFilter = '';
+    const input = document.getElementById('batch-search-input');
+    const clearBtn = document.getElementById('batch-clear-btn');
+    if (input) input.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+    renderBatchBoxes();
+}
+
+// ───────────────────────────────────────────────────────────────
+//  RENDER BATCH BOXES (called on load + every search keystroke)
+// ───────────────────────────────────────────────────────────────
+function renderBatchBoxes() {
     const container = document.getElementById('batch-boxes');
     if (!container) return;
 
-    // Get unique sorted years (newest first)
-    const years = [...new Set(
+    // All unique years, newest first
+    const allYears = [...new Set(
         allAlumni.map(a => a.yearGraduated).filter(Boolean)
     )].sort((a, b) => b - a);
 
-    // Fill "batches tracked" in employment panel
-    setText('emp-batches', years.length);
+    // Update employment panel batch count
+    setText('emp-batches', allYears.length);
 
-    if (!years.length) {
-        container.innerHTML = '<p style="color:var(--gray-text);text-align:center;padding:2rem;">No batch data available.</p>';
+    // Apply year filter
+    const filtered = batchFilter
+        ? allYears.filter(yr => yr.includes(batchFilter))
+        : allYears;
+
+    // Update count label next to the search bar
+    const label = document.getElementById('batch-count-label');
+    if (label) {
+        if (batchFilter) {
+            label.textContent = filtered.length === 0
+                ? 'No match'
+                : `${filtered.length} of ${allYears.length} batch${allYears.length !== 1 ? 'es' : ''}`;
+            label.style.color = filtered.length === 0 ? '#dc2626' : 'var(--gray-text)';
+        } else {
+            label.textContent = `${allYears.length} batch${allYears.length !== 1 ? 'es' : ''}`;
+            label.style.color = 'var(--gray-text)';
+        }
+    }
+
+    // No results state
+    if (!filtered.length) {
+        container.innerHTML = `
+      <div style="
+        grid-column:1/-1; text-align:center; padding:3rem 2rem;
+        background:white; border-radius:12px;
+        border:1px solid var(--gray-2);
+        color:var(--gray-text);
+      ">
+        <i class="fa-solid fa-calendar-xmark" style="
+          font-size:2rem; display:block;
+          margin-bottom:12px; color:var(--gray-3);
+        "></i>
+        No batch found for <strong>"${batchFilter}"</strong>
+        <br/>
+        <span style="font-size:12px;">Try a different year.</span>
+      </div>`;
         return;
     }
 
-    container.innerHTML = years.map(yr => {
+    // Render boxes
+    container.innerHTML = filtered.map(yr => {
         const count = allAlumni.filter(a => a.yearGraduated === yr).length;
         return `
       <div class="batch-box" onclick="openAlumniBatchModal('${yr}')">
@@ -172,22 +248,20 @@ function buildBatchBoxes() {
 }
 
 // ───────────────────────────────────────────────────────────────
-//  BUILD: FIELD OF PRACTICE LIST (gauge bars)
+//  FIELD OF PRACTICE LIST
 // ───────────────────────────────────────────────────────────────
 function buildFieldList() {
     const container = document.getElementById('field-list');
     if (!container) return;
 
-    // Count per industry
     const fieldCounts = {};
     allAlumni.forEach(a => {
         if (a.industry) fieldCounts[a.industry] = (fieldCounts[a.industry] || 0) + 1;
     });
 
     const sorted = Object.entries(fieldCounts).sort((a, b) => b[1] - a[1]);
-    const totalWithIndustry = allAlumni.filter(a => a.industry).length || 1;
+    const total = allAlumni.filter(a => a.industry).length || 1;
 
-    // Top field name for employment panel
     if (sorted[0]) setText('emp-top-field', sorted[0][0]);
 
     if (!sorted.length) {
@@ -198,16 +272,15 @@ function buildFieldList() {
     const colorClasses = ['top1', 'top2', 'top3'];
 
     container.innerHTML = sorted.map(([name, count], i) => {
-        const pct = Math.round((count / totalWithIndustry) * 100);
+        const pct = Math.round((count / total) * 100);
         const colorCls = i < 3 ? colorClasses[i] : 'rest';
-        // Escape single quotes for inline onclick
         const safeName = name.replace(/'/g, "\\'");
-
         return `
       <div class="field-row" onclick="openFieldModal('${safeName}')">
         <div class="field-row-top">
           <span class="fr-name">
-            <i class="fa-solid fa-industry" style="margin-right:6px;font-size:11px;color:var(--gray-text);"></i>
+            <i class="fa-solid fa-industry"
+               style="margin-right:6px;font-size:11px;color:var(--gray-text);"></i>
             ${name}
           </span>
           <span>
@@ -223,28 +296,36 @@ function buildFieldList() {
 }
 
 // ───────────────────────────────────────────────────────────────
-//  BUILD: RME YEAR BOXES
+//  RME YEAR BOXES
 // ───────────────────────────────────────────────────────────────
-function buildRmeYearBoxes() {
+function buildExamResultBoxes() {
     const container = document.getElementById('rme-year-boxes');
-    if (!container || !rmeData?.byYear) return;
+    if (!container) return;
 
-    if (!rmeData.byYear.length) {
-        container.innerHTML = '<p style="color:var(--gray-text);text-align:center;padding:2rem;">No year-by-year data available.</p>';
+    if (!examResultsData.length) {
+        container.innerHTML = `
+            <p style="color:var(--gray-text);text-align:center;
+                      grid-column:1/-1;padding:2rem;">
+              No published results available.
+            </p>`;
         return;
     }
 
-    container.innerHTML = rmeData.byYear.map(y => {
-        // Color code by passing rate
-        const colorCls = y.passingRate >= 75 ? 'passed'
-            : y.passingRate >= 50 ? 'mid'
+    container.innerHTML = examResultsData.map(e => {
+        const colorCls = e.slsuPassingRate >= 75 ? 'passed'
+            : e.slsuPassingRate >= 50 ? 'mid'
                 : 'low';
         return `
-      <div class="year-box ${colorCls}" onclick="openRmeModal('${y.year}')">
-        <div class="yb-rate">${y.passingRate}%</div>
-        <div class="yb-year">Year ${y.year}</div>
-        <div class="yb-count">${y.passers}/${y.takers} passed</div>
-      </div>`;
+            <div class="year-box ${colorCls}" onclick="openExamResultModal(${e.id})">
+                <div style="
+                    font-size:13px; font-weight:700;
+                    color:inherit; margin-bottom:4px;
+                    line-height:1.2;">
+                    ${e.month} ${e.year}
+                </div>
+                <div class="yb-rate">${e.slsuPassingRate}%</div>
+                <div class="yb-count">${e.slsuPassers}/${e.slsuExaminees} passed</div>
+            </div>`;
     }).join('');
 }
 
@@ -254,7 +335,8 @@ function buildRmeYearBoxes() {
 function openAlumniBatchModal(year) {
     const list = allAlumni.filter(a => a.yearGraduated === year);
 
-    setText('alumni-modal-title', `Alumni Batch ${year} — ${list.length} record${list.length !== 1 ? 's' : ''}`);
+    setText('alumni-modal-title',
+        `Alumni Batch ${year} — ${list.length} record${list.length !== 1 ? 's' : ''}`);
 
     const tbody = document.getElementById('alumni-modal-tbody');
     const noData = document.getElementById('alumni-no-data');
@@ -280,42 +362,114 @@ function openAlumniBatchModal(year) {
         }).join('');
     }
 
-    // Close search dropdown if open
     closeSearchDropdown();
     openModal('alumni-modal');
 }
 
 // ───────────────────────────────────────────────────────────────
-//  MODAL: RME YEAR DETAIL
+//  MODAL: RME YEAR DETAIL (with month breakdown)
 // ───────────────────────────────────────────────────────────────
-function openRmeModal(year) {
-    if (!rmeData?.byYear) return;
+// ═══════════════════════════════════════════════════════════════
+//  PATCH — app.js
+//  Replace the openRmeModal() function with this version.
+//  It now shows a "Top Notchers / Awardees" section inside
+//  the RME year modal, pulled from the Awards field.
+// ═══════════════════════════════════════════════════════════════
 
-    const yr = rmeData.byYear.find(y => String(y.year) === String(year));
-    if (!yr) return;
+function openExamResultModal(id) {
+    const e = examResultsData.find(r => Number(r.id) === Number(id));
+    if (!e) return;
 
-    setText('rme-modal-title', `RME Licensure Exam — ${year}`);
-    setText('rme-m-takers', yr.takers);
-    setText('rme-m-passers', yr.passers);
-    setText('rme-m-failed', yr.takers - yr.passers);
-    setText('rme-m-rate', `${yr.passingRate}%`);
+    setText('rme-modal-title', `RME — ${e.month} ${e.year}`);
 
-    // Color code the rate
+    // Summary stats
+    setText('rme-m-takers', e.slsuExaminees);
+    setText('rme-m-passers', e.slsuPassers);
+    setText('rme-m-failed', e.slsuExaminees - e.slsuPassers);
+    setText('rme-m-rate', `${e.slsuPassingRate}%`);
+
     const rateEl = document.getElementById('rme-m-rate');
     if (rateEl) {
-        rateEl.style.color = yr.passingRate >= 75 ? '#16a34a'
-            : yr.passingRate >= 50 ? '#f59e0b'
+        rateEl.style.color = e.slsuPassingRate >= 75 ? '#16a34a'
+            : e.slsuPassingRate >= 50 ? '#f59e0b'
                 : '#dc2626';
     }
 
-    // Passer status breakdown
-    const statusWrap = document.getElementById('status-tags-wrap');
-    if (statusWrap) {
-        const statuses = rmeData.byPasserStatus || {};
-        const entries = Object.entries(statuses);
-        statusWrap.innerHTML = entries.length
-            ? entries.map(([k, v]) => `<span class="stag">${k}: <strong>${v}</strong></span>`).join('')
-            : '<span style="color:var(--gray-text);font-size:12px;">No breakdown available.</span>';
+    // Detail stat cards
+    setText('rme-m-ft-rate', `${e.firstTimePassingRate}%`);
+    setText('rme-m-ft-detail', `${e.firstTimePassers} / ${e.firstTimeExaminees}`);
+    setText('rme-m-rep-rate', `${e.repeaterPassingRate}%`);
+    setText('rme-m-rep-detail', `${e.repeaterPassers} / ${e.repeaterExaminees}`);
+    setText('rme-m-nat-rate', `${e.nationalPassingRate}%`);
+    setText('rme-m-nat-detail',
+        `${(e.nationalPassers || 0).toLocaleString()} / ${(e.nationalExaminees || 0).toLocaleString()}`);
+
+    // Show charts section
+    const chartsSection = document.getElementById('rme-modal-charts');
+    if (chartsSection) chartsSection.style.display = 'block';
+
+    // Destroy previous chart instances to avoid canvas reuse error
+    if (window._rmeModalCharts) {
+        window._rmeModalCharts.forEach(c => { try { c.destroy(); } catch (_) { } });
+    }
+    window._rmeModalCharts = [];
+
+    // Bar chart — passing rates comparison
+    const barCtx = document.getElementById('rme-modal-bar')?.getContext('2d');
+    if (barCtx) {
+        window._rmeModalCharts.push(new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: ['First Time', 'Repeaters', 'SLSU Overall', 'National'],
+                datasets: [{
+                    data: [
+                        e.firstTimePassingRate,
+                        e.repeaterPassingRate,
+                        e.slsuPassingRate,
+                        e.nationalPassingRate
+                    ],
+                    backgroundColor: ['#2563EB', '#f59e0b', '#183356', '#16a34a'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: { callback: v => v + '%' }
+                    }
+                }
+            }
+        }));
+    }
+
+    // Doughnut chart — first time vs repeaters composition
+    const doughnutCtx = document.getElementById('rme-modal-doughnut')?.getContext('2d');
+    if (doughnutCtx && (e.firstTimeExaminees + e.repeaterExaminees) > 0) {
+        window._rmeModalCharts.push(new Chart(doughnutCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['First Time Takers', 'Repeaters'],
+                datasets: [{
+                    data: [e.firstTimeExaminees, e.repeaterExaminees],
+                    backgroundColor: ['#2563EB', '#f59e0b'],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        }));
+    }
+
+    // Narrative
+    const narrativeEl = document.getElementById('rme-modal-narrative');
+    if (narrativeEl) {
+        narrativeEl.textContent = e.narrative || '—';
     }
 
     openModal('rme-modal');
@@ -326,7 +480,6 @@ function openRmeModal(year) {
 // ───────────────────────────────────────────────────────────────
 function openFieldModal(industry) {
     const list = allAlumni.filter(a => a.industry === industry);
-
     setText('field-modal-title', `${industry} — ${list.length} alumni`);
 
     document.getElementById('field-modal-tbody').innerHTML = list.map((a, i) => `
@@ -343,7 +496,7 @@ function openFieldModal(industry) {
 }
 
 // ───────────────────────────────────────────────────────────────
-//  SEARCH
+//  ALUMNI NAME SEARCH (hero search bar)
 // ───────────────────────────────────────────────────────────────
 const searchInput = document.getElementById('searchAlumni');
 const searchDropdown = document.getElementById('search-dropdown');
@@ -356,7 +509,6 @@ function closeSearchDropdown() {
 if (searchInput && searchDropdown) {
     searchInput.addEventListener('input', () => {
         const kw = searchInput.value.trim().toLowerCase();
-
         if (!kw || kw.length < 2) {
             searchDropdown.classList.remove('open');
             return;
@@ -366,37 +518,31 @@ if (searchInput && searchDropdown) {
             .filter(a => (a.fullName || '').toLowerCase().includes(kw))
             .slice(0, 8);
 
-        if (!matches.length) {
-            searchDropdown.innerHTML = '<div class="search-no">No alumni found</div>';
-        } else {
-            searchDropdown.innerHTML = matches.map(a => `
-        <div class="search-item" onclick="openAlumniBatchModal('${a.yearGraduated}')">
-          <div class="si-name">${highlight(a.fullName, kw)}</div>
-          <div class="si-sub">
-            ${a.yearGraduated || '—'} &nbsp;·&nbsp;
-            ${a.jobTitle || '—'} &nbsp;·&nbsp;
-            ${a.companyName || '—'}
-          </div>
-        </div>`).join('');
-        }
+        searchDropdown.innerHTML = matches.length
+            ? matches.map(a => `
+          <div class="search-item" onclick="openAlumniBatchModal('${a.yearGraduated}')">
+            <div class="si-name">${highlight(a.fullName, kw)}</div>
+            <div class="si-sub">
+              ${a.yearGraduated || '—'} &nbsp;·&nbsp;
+              ${a.jobTitle || '—'} &nbsp;·&nbsp;
+              ${a.companyName || '—'}
+            </div>
+          </div>`).join('')
+            : '<div class="search-no">No alumni found</div>';
 
         searchDropdown.classList.add('open');
     });
 
-    // Close when clicking outside
     document.addEventListener('click', e => {
-        if (!e.target.closest('.search-wrap')) {
+        if (!e.target.closest('.search-wrap'))
             searchDropdown.classList.remove('open');
-        }
     });
 
-    // Close on Escape
     searchInput.addEventListener('keydown', e => {
         if (e.key === 'Escape') searchDropdown.classList.remove('open');
     });
 }
 
-/** Wraps matched characters in a <mark> tag for the dropdown */
 function highlight(text, kw) {
     if (!text) return '—';
     const idx = text.toLowerCase().indexOf(kw);
@@ -409,40 +555,35 @@ function highlight(text, kw) {
 }
 
 // ───────────────────────────────────────────────────────────────
-//  MOBILE NAV — active state on scroll
+//  MOBILE NAV active state on scroll
 // ───────────────────────────────────────────────────────────────
 const sections = ['main-page', 'about', 'alumni-list', 'employment', 'board-exam', 'contact'];
 const mobileNav = document.querySelector('.mobile-nav');
 
 if (mobileNav) {
-    const mobileItems = mobileNav.querySelectorAll('li:not(.admin-mob)');
-
+    const items = mobileNav.querySelectorAll('li:not(.admin-mob)');
     window.addEventListener('scroll', () => {
         let current = '';
         sections.forEach(id => {
             const el = document.getElementById(id);
             if (el && window.scrollY >= el.offsetTop - 120) current = id;
         });
-
-        mobileItems.forEach((li, i) => {
-            li.classList.toggle('active', sections[i] === current);
-        });
+        items.forEach((li, i) => li.classList.toggle('active', sections[i] === current));
     }, { passive: true });
 }
 
 // ───────────────────────────────────────────────────────────────
-//  HELPERS
-// ───────────────────────────────────────────────────────────────
-function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-}
-
-// ───────────────────────────────────────────────────────────────
-//  INIT — runs on page load
+//  INIT
 // ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    loadSummary();   // hero counters
-    loadAlumni();    // batch boxes, field list, search data
-    loadRme();       // rme banner, year boxes, pass rate
+    loadSummary();
+    loadAlumni();
+    loadRme();
+});
+const empStats = document.querySelectorAll('.emp-stat');
+
+empStats.forEach((el, i) => {
+  setTimeout(() => {
+    el.classList.add('show');
+  }, i * 150); // stagger delay
 });

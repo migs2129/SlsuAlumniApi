@@ -1,0 +1,75 @@
+﻿/* ═══ ALUMNI LIST ═══ */
+#alumni-list {
+    background: white;
+}
+
+.batch-boxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 150px)); /* fixed width */
+    justify-content: center; /* 👈 centers the whole grid */
+    gap: 1rem;
+}
+
+.batch-box {
+    background: var(--gray-bg);
+    border: 1px solid var(--gray-2);
+    border-radius: var(--radius);
+    padding: 1.5rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s;
+}
+
+    .batch-box:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-md);
+        background: var(--blue);
+        color: white;
+        border-color: var(--blue);
+    }
+
+        .batch-box:hover .bb-label, .batch-box:hover .bb-year, .batch-box:hover .bb-count {
+            color: white;
+        }
+
+    .batch-box .bb-icon {
+        font-size: 1.5rem;
+        margin-bottom: 8px;
+        color: var(--blue);
+    }
+
+    .batch-box:hover .bb-icon {
+        color: var(--yellow);
+    }
+
+    .batch-box .bb-label {
+        font-size: 11px;
+        color: var(--gray-text);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .batch-box .bb-year {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--blue);
+        line-height: 1;
+    }
+
+    .batch-box .bb-count {
+        font-size: 11px;
+        color: var(--gray-text);
+        margin-top: 4px;
+    }
+
+.yb-months {
+    font-size: 9px;
+    color: var(--gray-text);
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+    margin: 4px auto 0;
+}

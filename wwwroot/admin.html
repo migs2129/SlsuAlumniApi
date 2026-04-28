@@ -1,0 +1,909 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Portal — SLSU BSME Alumni System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/src/styles/admin.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="login-card">
+            <img src="/src/img/slsuIcon.jpeg" />
+            <h2>Admin Portal</h2>
+            <p>SLSU BSME Alumni Tracking System</p>
+            <div class="form-group" style="text-align:left;margin-bottom:10px;">
+                <label>Username</label>
+                <input type="text" id="l-user" placeholder="Enter username" autocomplete="username" />
+            </div>
+            <div class="form-group" style="text-align:left;margin-bottom:16px;">
+                <label>Password</label>
+                <input type="password" id="l-pass" placeholder="Enter password" autocomplete="current-password"
+                       onkeydown="if(event.key==='Enter')doLogin()" />
+            </div>
+            <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="doLogin()">
+                <i class="fa-solid fa-right-to-bracket"></i> Sign In
+            </button>
+            <div class="login-err" id="login-err">Invalid username or password.</div>
+        </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <img src="/src/img/slsuIcon.jpeg" />
+            <span>SLSU BSME<br>Admin Portal</span>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-group-label">Main</div>
+            <div class="nav-item active" data-view="dashboard" onclick="switchView('dashboard')">
+                <i class="fa-solid fa-gauge"></i> Dashboard
+            </div>
+            <div class="nav-group-label">Alumni</div>
+            <div class="nav-item" data-view="alumni" onclick="switchView('alumni')">
+                <i class="fa-solid fa-users"></i> Alumni Records
+            </div>
+            <div class="nav-item" data-view="pending" onclick="switchView('pending')">
+                <i class="fa-solid fa-clock"></i> Pending Approvals
+                <span class="nav-badge" id="pending-badge" style="display:none;">0</span>
+            </div>
+            <div class="nav-group-label">Analytics</div>
+            <div class="nav-item" data-view="board" onclick="switchView('board')">
+                <i class="fa-solid fa-id-card"></i> Board Exam Data
+            </div>
+            <div class="nav-item" data-view="examresults" onclick="switchView('examresults')">
+                <i class="fa-solid fa-file-pen"></i> Exam Results
+            </div>
+            <div class="nav-item" data-view="employment" onclick="switchView('employment')">
+                <i class="fa-solid fa-briefcase"></i> Employment Data
+            </div>
+            <div class="nav-group-label" id="admin-mgmt-label" style="display:none;">System</div>
+            <div class="nav-item" data-view="accounts" onclick="switchView('accounts')" id="nav-accounts" style="display:none;">
+                <i class="fa-solid fa-user-shield"></i> Admin Accounts
+            </div>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="admin-info">
+                <div class="admin-avatar" id="admin-avatar">A</div>
+                <div>
+                    <div class="name" id="admin-name">Admin</div>
+                    <div class="role" id="admin-role">admin</div>
+                </div>
+            </div>
+            <button class="btn-logout" onclick="logout()">
+                <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+            </button>
+        </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main">
+        <div class="topbar">
+            <h1 id="topbar-title">Dashboard</h1>
+            <div class="topbar-right">
+                <a href="/index.html" class="btn btn-outline" style="font-size:12px;padding:5px 12px;">
+                    <i class="fa-solid fa-arrow-left"></i> Public Site
+                </a>
+            </div>
+        </div>
+        <div class="content">
+
+            <!-- ══ DASHBOARD ══════════════════════════════════════════════════ -->
+            <div class="view active" id="view-dashboard">
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue"><i class="fa-solid fa-users"></i></div>
+                        <div class="stat-body"><div class="lbl">Total Alumni</div><div class="num" id="d-total">—</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green"><i class="fa-solid fa-briefcase"></i></div>
+                        <div class="stat-body"><div class="lbl">Employed</div><div class="num" id="d-employed">—</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon amber"><i class="fa-solid fa-id-card"></i></div>
+                        <div class="stat-body"><div class="lbl">RMeE Passers</div><div class="num" id="d-rme">—</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red"><i class="fa-solid fa-clock"></i></div>
+                        <div class="stat-body"><div class="lbl">Pending Review</div><div class="num" id="d-pending">—</div></div>
+                    </div>
+                </div>
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <h3>Graduates per Year</h3>
+                        <canvas id="c-grad"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Employment Type Breakdown</h3>
+                        <canvas id="c-emp"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Industry Distribution (Top 8)</h3>
+                        <canvas id="c-ind"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>RMeE Passing Rate by Year</h3>
+                        <canvas id="c-rme"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════════
+            PATCH: Replace the entire view-alumni div in admin.html
+            Also replace the modal-alumni div
+            ═══════════════════════════════════════════════════════════════ -->
+            <!-- ══ ALUMNI RECORDS VIEW ════════════════════════════════════ -->
+            <div class="view" id="view-alumni">
+                <div class="card">
+                    <div class="card-head">
+                        <h3>Alumni Records</h3>
+                        <div class="card-controls">
+                            <!-- Name search -->
+                            <input type="text"
+                                   id="alumni-search"
+                                   placeholder="Search name or company..."
+                                   oninput="filterAlumni()"
+                                   style="min-width:180px;" />
+                            <!-- Year filter — type a year to keep only that batch -->
+                            <input type="text"
+                                   id="alumni-year-search"
+                                   placeholder="Filter by year (e.g. 2018)"
+                                   oninput="filterAlumni()"
+                                   maxlength="4"
+                                   style="width:180px;" />
+                            <select id="alumni-emp-filter" onchange="filterAlumni()">
+                                <option value="">All Employment</option>
+                                <option>Full-Time</option>
+                                <option>Part-Time</option>
+                                <option>Contractual</option>
+
+                            </select>
+                            <button class="btn btn-primary" onclick="openAddAlumni()">
+                                <i class="fa-solid fa-plus"></i> Add Alumni
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Active filter pill shown when year is typed -->
+                    <div id="year-filter-pill" style="display:none; padding:6px 1.25rem;
+         border-bottom:1px solid var(--g3); background:var(--g1);">
+                        <span style="font-size:12px; color:var(--gt);">Showing batch year:</span>
+                        <span id="year-pill-value" style="
+        display:inline-block; margin-left:6px;
+        background:var(--blue); color:white;
+        font-size:11px; font-weight:700;
+        padding:2px 10px; border-radius:20px;
+      "></span>
+                        <button onclick="clearYearFilter()" style="
+        margin-left:8px; background:none; border:none;
+        color:var(--gt); font-size:12px; cursor:pointer;
+        text-decoration:underline;
+      ">
+                            Clear
+                        </button>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Full Name</th>
+                                    <th>Year Grad.</th>
+                                    <th>Job Title</th>
+                                    <th>Company</th>
+                                    <th>Industry</th>
+                                    <th>Employment</th>
+                                    <th>RMeE</th>
+                                    <th>Passer Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alumni-tbody">
+                                <tr class="load-row"><td colspan="10">Loading alumni...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="table-footer">
+                        <span id="alumni-info"></span>
+                        <div class="pager" id="alumni-pager"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ ADD / EDIT ALUMNI MODAL ════════════════════════════════ -->
+            <div class="modal-overlay" id="modal-alumni">
+                <div class="modal" style="max-width:700px;">
+                    <div class="modal-head">
+                        <h3 id="modal-alumni-title">Add Alumni</h3>
+                        <button class="btn-x" onclick="closeModal('modal-alumni')">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-grid">
+
+                            <!-- Personal Info -->
+                            <div class="form-group full">
+                                <label>Full Name *</label>
+                                <input id="f-name" type="text" placeholder="Dela Cruz, Juan P." />
+                            </div>
+                            <div class="form-group">
+                                <label>Sex</label>
+                                <select id="f-sex">
+                                    <option value="">—</option>
+                                    <option>Male</option>
+                                    <option>Female</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Date of Birth</label>
+                                <input id="f-dob" type="text" placeholder="MM/DD/YYYY" />
+                            </div>
+                            <div class="form-group">
+                                <label>Email</label>
+                                <input id="f-email" type="email" placeholder="email@example.com" />
+                            </div>
+                            <div class="form-group">
+                                <label>Contact Number</label>
+                                <input id="f-contact" type="text" placeholder="09XX-XXX-XXXX" />
+                            </div>
+                            <div class="form-group full">
+                                <label>Present Address</label>
+                                <input id="f-address" type="text" placeholder="City, Province" />
+                            </div>
+
+                            <!-- Academic Info -->
+                            <div class="form-group">
+                                <label>Year Enrolled</label>
+                                <input id="f-enrolled" type="text" placeholder="2010" />
+                            </div>
+                            <div class="form-group">
+                                <label>Year Graduated</label>
+                                <input id="f-graduated" type="text" placeholder="2015" />
+                            </div>
+                            <div class="form-group full">
+                                <label>Graduate School Program</label>
+                                <input id="f-grad-prog" type="text" placeholder="Optional" />
+                            </div>
+
+                            <!-- RME Info — in confirmed column order: M, N, O, P, Q -->
+                            <div class="form-group">
+                                <label>Passed RME Exam?</label>
+                                <select id="f-rme">
+                                    <option value="">—</option>
+                                    <option value="Yes">Yes</option>
+                                    <option value="No">No</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Month Taken (RME)</label>
+                                <select id="f-month-taken">
+                                    <option value="">—</option>
+                                    <option>February</option>
+                                    <option>March</option>
+                                    <option>August</option>
+                                    <option>September</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Year Taken (RME)</label>
+                                <input id="f-year-taken" type="text" placeholder="2016" />
+                            </div>
+                            <div class="form-group">
+                                <label>Passer Status</label>
+                                <select id="f-passer">
+                                    <option value="">—</option>
+                                    <option>First Time Taker</option>
+                                    <option>Repeater</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Awards</label>
+                                <input id="f-awards" type="text" placeholder="Optional" />
+                            </div>
+
+                            <!-- Employment Info -->
+                            <div class="form-group">
+                                <label>Job Title</label>
+                                <input id="f-jobtitle" type="text" placeholder="Mechanical Engineer" />
+                            </div>
+                            <div class="form-group">
+                                <label>Company Name</label>
+                                <input id="f-company" type="text" placeholder="Company Inc." />
+                            </div>
+                            <div class="form-group">
+                                <label>Industry</label>
+                                <input id="f-industry" type="text" placeholder="Manufacturing" />
+                            </div>
+                            <div class="form-group">
+                                <label>Employment Type</label>
+                                <select id="f-emptype">
+                                    <option value="">—</option>
+                                    <option>Full-Time</option>
+                                    <option>Part-Time</option>
+                                    <option>Contractual</option>
+
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Job Location</label>
+                                <input id="f-jobloc" type="text" placeholder="Manila, Philippines" />
+                            </div>
+
+                        </div>
+                    </div>
+                    <div class="modal-foot">
+                        <button class="btn btn-outline" onclick="closeModal('modal-alumni')">Cancel</button>
+                        <button class="btn btn-primary" onclick="saveAlumni()">
+                            <i class="fa-solid fa-floppy-disk"></i> Save
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ PENDING APPROVALS ═══════════════════════════════════════════ -->
+            <div class="view" id="view-pending">
+                <div class="card">
+                    <div class="card-head">
+                        <h3>Pending Submissions</h3>
+                        <div class="card-controls">
+                            <select id="pend-filter" onchange="filterPending()">...</select>
+                            <!-- ADD THIS BUTTON: -->
+                            <button id="btn-sync" class="btn btn-primary" onclick="triggerSync()">
+                                <i class="fa-solid fa-rotate"></i> Sync from Google Sheets
+                            </button>
+                        </div>
+                        <div class="card-controls">
+                            <select id="pend-filter" onchange="filterPending()">
+                                <option value="Pending">Pending</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Rejected">Rejected</option>
+                                <option value="">All</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Full Name</th>
+                                    <th>Year Grad.</th>
+                                    <th>Job Title</th>
+                                    <th>Company</th>
+                                    <th>Submitted</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pending-tbody">
+                                <tr class="load-row"><td colspan="8">Loading submissions...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="table-footer">
+                        <span id="pending-info"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ BOARD EXAM ══════════════════════════════════════════════════ -->
+            <div class="view" id="view-board">
+                <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
+                    <div class="stat-card">
+                        <div class="stat-icon blue"><i class="fa-solid fa-users"></i></div>
+                        <div class="stat-body"><div class="lbl">Total Takers</div><div class="num" id="b-takers">—</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green"><i class="fa-solid fa-check-circle"></i></div>
+                        <div class="stat-body"><div class="lbl">Total Passers</div><div class="num" id="b-passers">—</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon amber"><i class="fa-solid fa-chart-line"></i></div>
+                        <div class="stat-body"><div class="lbl">Overall Pass Rate</div><div class="num" id="b-rate">—</div></div>
+                    </div>
+                </div>
+                <div class="chart-card wide" style="margin-bottom:1rem;">
+                    <h3>Passers vs Non-Passers by Year</h3>
+                    <canvas id="c-board-detail" style="max-height:280px;"></canvas>
+                </div>
+                <div class="card">
+                    <div class="card-head"><h3>Year-by-Year Breakdown</h3></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Year Taken</th><th>Takers</th><th>Passers</th><th>Not Passed</th><th>Passing Rate</th><th>Exam Months</th><th>Awardees</th></tr></thead>
+                            <tbody id="board-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card" id="board-awards-panel" style="display:none;"></div>
+            </div>
+            <!-- ══ BOARD EXAM VIEW (analytics only) ══ -->
+            <div class="view" id="view-board">
+                <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
+                    <div class="stat-card">
+                        <div class="stat-icon blue"><i class="fa-solid fa-users"></i></div>
+                        <div class="stat-body"><div class="lbl">Total Takers</div><div class="num" id="b-takers">—</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green"><i class="fa-solid fa-check-circle"></i></div>
+                        <div class="stat-body"><div class="lbl">Total Passers</div><div class="num" id="b-passers">—</div></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon amber"><i class="fa-solid fa-chart-line"></i></div>
+                        <div class="stat-body"><div class="lbl">Overall Pass Rate</div><div class="num" id="b-rate">—</div></div>
+                    </div>
+                </div>
+                <div class="chart-card wide" style="margin-bottom:1rem;">
+                    <h3>Passers vs Non-Passers by Year</h3>
+                    <canvas id="c-board-detail" style="max-height:280px;"></canvas>
+                </div>
+                <div class="card">
+                    <div class="card-head"><h3>Year-by-Year Breakdown (System Data)</h3></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Year Taken</th>
+                                    <th>Takers</th>
+                                    <th>Passers</th>
+                                    <th>Not Passed</th>
+                                    <th>Passing Rate</th>
+                                    <th>Exam Months</th>
+                                    <th>Awardees</th>
+                                </tr>
+                            </thead>
+                            <tbody id="board-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card" id="board-awards-panel" style="display:none;"></div>
+            </div>
+
+            <!-- ══ EXAM RESULTS MANAGEMENT VIEW ══ -->
+            <div class="view" id="view-examresults">
+                <div class="card" style="margin-bottom:1rem;">
+                    <div class="card-head">
+                        <h3>Board Exam Results</h3>
+                        <div class="card-controls">
+                            <button class="btn btn-primary" onclick="openAddExamResult()">
+                                <i class="fa-solid fa-plus"></i> Add Exam Result
+                            </button>
+                        </div>
+                    </div>
+                    <p style="padding:0.5rem 1.25rem 0;font-size:12px;color:var(--gt);">
+                        Manage what is displayed on the public Board Exam Data page.
+                        Only <strong>Published</strong> results appear publicly.
+                    </p>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Period</th>
+                                    <th>Source</th>
+                                    <th>SLSU Rate</th>
+                                    <th>SLSU Passers</th>
+                                    <th>National Rate</th>
+                                    <th>Difference</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="examresults-tbody">
+                                <tr class="load-row"><td colspan="8">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ EMPLOYMENT ══════════════════════════════════════════════════ -->
+            <div class="view" id="view-employment">
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <h3>Employment Type Distribution</h3>
+                        <canvas id="c-emp2"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Top Industries</h3>
+                        <canvas id="c-ind2"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-head"><h3>Industry Breakdown</h3></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Industry</th><th>Count</th><th>Percentage</th></tr></thead>
+                            <tbody id="industry-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══ ADMIN ACCOUNTS ══════════════════════════════════════════════ -->
+            <div class="view" id="view-accounts">
+                <div class="card">
+                    <div class="card-head">
+                        <h3>Admin Accounts</h3>
+                        <button class="btn btn-primary" onclick="openCreateAdmin()">
+                            <i class="fa-solid fa-plus"></i> Create Admin
+                        </button>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Full Name</th>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="accounts-tbody">
+                                <tr class="load-row"><td colspan="7">Loading accounts...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /content -->
+    </div><!-- /main -->
+    <!-- ══ MODALS ══════════════════════════════════════════════════════════════ -->
+    <!-- Add/Edit Alumni -->
+    <div class="modal-overlay" id="modal-alumni">
+        <div class="modal" style="max-width:700px;">
+            <div class="modal-head">
+                <h3 id="modal-alumni-title">Add Alumni</h3>
+                <button class="btn-x" onclick="closeModal('modal-alumni')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-group full"><label>Full Name *</label><input id="f-name" type="text" placeholder="Dela Cruz, Juan P." /></div>
+                    <div class="form-group">
+                        <label>Sex</label>
+                        <select id="f-sex"><option value="">—</option><option>Male</option><option>Female</option></select>
+                    </div>
+                    <div class="form-group"><label>Date of Birth</label><input id="f-dob" type="text" placeholder="MM/DD/YYYY" /></div>
+                    <div class="form-group"><label>Email</label><input id="f-email" type="email" placeholder="email@example.com" /></div>
+                    <div class="form-group"><label>Contact Number</label><input id="f-contact" type="text" placeholder="09XX-XXX-XXXX" /></div>
+                    <div class="form-group full"><label>Present Address</label><input id="f-address" type="text" placeholder="City, Province" /></div>
+                    <div class="form-group"><label>Year Enrolled</label><input id="f-enrolled" type="text" placeholder="2010" /></div>
+                    <div class="form-group"><label>Year Graduated</label><input id="f-graduated" type="text" placeholder="2015" /></div>
+                    <div class="form-group"><label>Graduate School Program</label><input id="f-grad-prog" type="text" placeholder="Optional" /></div>
+                    <div class="form-group">
+                        <label>Passed RMeE Exam?</label>
+                        <select id="f-rme"><option value="">—</option><option value="Yes">Yes</option><option value="No">No</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Passer Status</label>
+                        <select id="f-passer"><option value="">—</option><option>First Time</option><option>Second Time</option><option>Third Time</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Month Taken (RMeE)</label>
+                        <select id="f-month-taken">
+                            <option value="">—</option>
+                            <option>February</option>
+                            <option>March</option>
+                            <option>August</option>
+                            <option>September</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Year Taken (RMeE)</label><input id="f-year-taken" type="text" placeholder="2016" /></div>
+                    <div class="form-group"><label>Awards</label><input id="f-awards" type="text" placeholder="Optional" /></div>
+                    <div class="form-group"><label>Job Title</label><input id="f-jobtitle" type="text" placeholder="Mechanical Engineer" /></div>
+                    <div class="form-group"><label>Company Name</label><input id="f-company" type="text" placeholder="Company Inc." /></div>
+                    <div class="form-group"><label>Industry</label><input id="f-industry" type="text" placeholder="Manufacturing" /></div>
+                    <div class="form-group">
+                        <label>Employment Type</label>
+                        <select id="f-emptype">
+                            <option value="">—</option>
+                            <option>Full-Time</option>
+                            <option>Part-Time</option>
+                            <option>Contractual</option>
+
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Job Location</label><input id="f-jobloc" type="text" placeholder="Manila, Philippines" /></div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-outline" onclick="closeModal('modal-alumni')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveAlumni()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View / Approve Submission -->
+    <div class="modal-overlay" id="modal-submission">
+        <div class="modal" style="max-width:640px;">
+            <div class="modal-head">
+                <h3 id="sub-modal-title">Submission Details</h3>
+                <button class="btn-x" onclick="closeModal('modal-submission')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-grid" id="sub-detail-grid"></div>
+            </div>
+            <div class="modal-foot" id="sub-modal-foot">
+                <button class="btn btn-outline" onclick="closeModal('modal-submission')">Close</button>
+                <button class="btn btn-danger" id="btn-reject-sub" onclick="promptReject()">
+                    <i class="fa-solid fa-xmark"></i> Reject
+                </button>
+                <button class="btn btn-success" id="btn-approve-sub" onclick="approveCurrentSub()">
+                    <i class="fa-solid fa-check"></i> Approve
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- ══ ADD/EDIT EXAM RESULT MODAL ══ -->
+    <div class="modal-overlay" id="modal-examresult">
+        <div class="modal" style="max-width:680px;">
+            <div class="modal-head">
+                <h3 id="modal-examresult-title">Add Exam Result</h3>
+                <button class="btn-x" onclick="closeModal('modal-examresult')">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Data Source Toggle -->
+                <div style="background:var(--g1);border-radius:var(--r-sm);padding:1rem;
+                        margin-bottom:1.25rem;border:1px solid var(--g3);">
+                    <div style="font-size:12px;font-weight:700;color:var(--blue);
+                            text-transform:uppercase;margin-bottom:8px;">
+                        Data Source
+                    </div>
+                    <div style="display:flex;gap:1rem;">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                            <input type="radio" name="datasource" id="ds-manual" value="manual"
+                                   checked onchange="onDataSourceChange(this.value)" />
+                            Manual Entry
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                            <input type="radio" name="datasource" id="ds-system" value="system"
+                                   onchange="onDataSourceChange(this.value)" />
+                            Pull from System Data
+                        </label>
+                    </div>
+                    <div id="system-pull-controls" style="display:none;margin-top:12px;">
+                        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+                            <div class="form-group" style="margin:0;">
+                                <label>Month</label>
+                                <select id="pull-month">
+                                    <option value="">Select month</option>
+                                    <option>February</option>
+                                    <option>March</option>
+                                    <option>August</option>
+                                    <option>September</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label>Year</label>
+                                <input type="number" id="pull-year" placeholder="2025" style="width:90px;" />
+                            </div>
+                            <button class="btn btn-outline" onclick="pullSystemData()">
+                                <i class="fa-solid fa-download"></i> Pull Data
+                            </button>
+                        </div>
+                        <p style="font-size:11px;color:var(--gt);margin-top:6px;">
+                            Pulls SLSU data from Google Sheets. National data must still be entered manually.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Month *</label>
+                        <select id="er-month">
+                            <option value="">Select month</option>
+                            <option>February</option>
+                            <option>March</option>
+                            <option>August</option>
+                            <option>September</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Year *</label>
+                        <input type="number" id="er-year" placeholder="2025" />
+                    </div>
+                </div>
+
+                <!-- SLSU Results -->
+                <div style="font-size:12px;font-weight:700;color:var(--blue);
+                        text-transform:uppercase;letter-spacing:0.5px;
+                        margin:1rem 0 0.5rem;padding-top:0.75rem;
+                        border-top:1px solid var(--g3);">
+                    SLSU Results
+                </div>
+                <div class="form-grid form-col3">
+                    <div class="form-group">
+                        <label>Examinees</label>
+                        <input type="number" id="er-slsu-examinees" placeholder="70"
+                               oninput="autoCalcRates()" />
+                    </div>
+                    <div class="form-group">
+                        <label>Passers</label>
+                        <input type="number" id="er-slsu-passers" placeholder="38"
+                               oninput="autoCalcRates()" />
+                    </div>
+                    <div class="form-group">
+                        <label>Passing Rate</label>
+                        <input type="text" id="er-slsu-rate" placeholder="auto" readonly
+                               style="background:var(--g2);color:var(--gt);" />
+                    </div>
+                </div>
+
+                <!-- First Time Takers -->
+                <div style="font-size:12px;font-weight:700;color:var(--blue);
+                        text-transform:uppercase;letter-spacing:0.5px;margin:1rem 0 0.5rem;">
+                    First Time Takers
+                </div>
+                <div class="form-grid form-col3">
+                    <div class="form-group">
+                        <label>Examinees</label>
+                        <input type="number" id="er-ft-examinees" placeholder="61"
+                               oninput="autoCalcRates()" />
+                    </div>
+                    <div class="form-group">
+                        <label>Passers</label>
+                        <input type="number" id="er-ft-passers" placeholder="37"
+                               oninput="autoCalcRates()" />
+                    </div>
+                    <div class="form-group">
+                        <label>Passing Rate</label>
+                        <input type="text" id="er-ft-rate" placeholder="auto" readonly
+                               style="background:var(--g2);color:var(--gt);" />
+                    </div>
+                </div>
+
+                <!-- Repeaters -->
+                <div style="font-size:12px;font-weight:700;color:var(--blue);
+                        text-transform:uppercase;letter-spacing:0.5px;margin:1rem 0 0.5rem;">
+                    Repeaters
+                </div>
+                <div class="form-grid form-col3">
+                    <div class="form-group">
+                        <label>Examinees</label>
+                        <input type="number" id="er-rep-examinees" placeholder="9"
+                               oninput="autoCalcRates()" />
+                    </div>
+                    <div class="form-group">
+                        <label>Passers</label>
+                        <input type="number" id="er-rep-passers" placeholder="1"
+                               oninput="autoCalcRates()" />
+                    </div>
+                    <div class="form-group">
+                        <label>Passing Rate</label>
+                        <input type="text" id="er-rep-rate" placeholder="auto" readonly
+                               style="background:var(--g2);color:var(--gt);" />
+                    </div>
+                </div>
+
+                <!-- National -->
+                <div style="font-size:12px;font-weight:700;color:var(--blue);
+                        text-transform:uppercase;letter-spacing:0.5px;margin:1rem 0 0.5rem;">
+                    National Results
+                </div>
+                <div class="form-grid form-col3">
+                    <div class="form-group">
+                        <label>Examinees</label>
+                        <input type="number" id="er-nat-examinees" placeholder="6741"
+                               oninput="autoCalcRates()" />
+                    </div>
+                    <div class="form-group">
+                        <label>Passers</label>
+                        <input type="number" id="er-nat-passers" placeholder="4137"
+                               oninput="autoCalcRates()" />
+                    </div>
+                    <div class="form-group">
+                        <label>National Rate</label>
+                        <input type="text" id="er-nat-rate" placeholder="auto" readonly
+                               style="background:var(--g2);color:var(--gt);" />
+                    </div>
+                </div>
+
+                <!-- Narrative preview -->
+                <div style="margin-top:1rem;">
+                    <div style="font-size:11px;font-weight:700;color:var(--gt);
+                            text-transform:uppercase;margin-bottom:6px;">
+                        Narrative Preview
+                    </div>
+                    <div id="er-narrative-preview" style="
+                    background:var(--g1);border:1px solid var(--g3);
+                    border-radius:var(--r-sm);padding:10px 12px;
+                    font-size:12px;line-height:1.7;color:var(--t2);
+                    min-height:60px;">
+                        Fill in the fields above to see the narrative preview.
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top:1rem;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="er-published" />
+                        <span style="font-size:13px;">Publish immediately (visible on public site)</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-outline" onclick="closeModal('modal-examresult')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveExamResult()">
+                    <i class="fa-solid fa-floppy-disk"></i> Save
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Reason -->
+    <div class="modal-overlay" id="modal-reject">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-head">
+                <h3>Reject Submission</h3>
+                <button class="btn-x" onclick="closeModal('modal-reject')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Reason for Rejection</label>
+                    <textarea id="reject-reason" rows="4" placeholder="Provide a reason (optional)..."></textarea>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-outline" onclick="closeModal('modal-reject')">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmReject()"><i class="fa-solid fa-xmark"></i> Confirm Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Admin Account -->
+    <div class="modal-overlay" id="modal-create-admin">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-head">
+                <h3>Create Admin Account</h3>
+                <button class="btn-x" onclick="closeModal('modal-create-admin')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid" style="grid-template-columns:1fr;">
+                    <div class="form-group"><label>Full Name *</label><input id="na-fullname" type="text" placeholder="Juan Dela Cruz" /></div>
+                    <div class="form-group"><label>Username *</label><input id="na-username" type="text" placeholder="jdelacruz" /></div>
+                    <div class="form-group"><label>Password *</label><input id="na-password" type="password" placeholder="Min 8 characters" /></div>
+                    <div class="form-group">
+                        <label>Role</label>
+                        <select id="na-role"><option value="admin">Admin</option><option value="superadmin">Super Admin</option></select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-outline" onclick="closeModal('modal-create-admin')">Cancel</button>
+                <button class="btn btn-primary" onclick="createAdmin()"><i class="fa-solid fa-plus"></i> Create Account</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirm -->
+    <div class="modal-overlay" id="modal-confirm">
+        <div class="modal" style="max-width:380px;">
+            <div class="modal-head">
+                <h3>Confirm Delete</h3>
+                <button class="btn-x" onclick="closeModal('modal-confirm')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-msg" style="color:var(--t2);line-height:1.7;"></p>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-outline" onclick="closeModal('modal-confirm')">Cancel</button>
+                <button class="btn btn-danger" id="confirm-ok-btn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <script src="/src/js/admin.js" defer></script>
+</body>
+</html>

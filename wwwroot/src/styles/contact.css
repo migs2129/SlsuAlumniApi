@@ -1,0 +1,24 @@
+﻿/* ═══ CONTACT ═══ */
+#contact {
+    background: white;
+}
+
+.contact-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.contact-card {
+    background: var(--gray-bg);
+    border: 1px solid var(--gray-2);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+}
+
+    .contact-card h3 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--blue);
+        margin-bottom: 1rem;
+    }
