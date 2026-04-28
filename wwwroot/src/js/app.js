@@ -380,7 +380,7 @@ function openExamResultModal(id) {
     const e = examResultsData.find(r => Number(r.id) === Number(id));
     if (!e) return;
 
-    setText('rme-modal-title', `RME — ${e.month} ${e.year}`);
+    setText('rme-modal-title', `MELE — ${e.month} ${e.year}`);
 
     // Summary stats
     setText('rme-m-takers', e.slsuExaminees);

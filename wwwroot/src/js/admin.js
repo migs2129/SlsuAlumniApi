@@ -594,7 +594,7 @@ function viewSubmission(id) {
         ['Full Name', s.fullName], ['Sex', s.sex], ['Date of Birth', s.dateOfBirth],
         ['Email', s.email], ['Contact Number', s.contactNumber], ['Present Address', s.presentAddress],
         ['Year Enrolled', s.yearEnrolled], ['Year Graduated', s.yearGraduated],
-        ['Grad. Program', s.graduateSchoolProgram], ['Passed RME?', s.passedLicensureExam],
+        ['Grad. Program', s.graduateSchoolProgram], ['Passed MELE?', s.passedLicensureExam],
         ['Month Taken', s.monthTaken], ['Year Taken', s.yearTaken],
         ['Passer Status', s.passerStatus], ['Awards', s.awards],
         ['Job Title', s.jobTitle], ['Company', s.companyName], ['Industry', s.industry],
@@ -1114,8 +1114,8 @@ function autoCalcRates() {
         const natE = parseInt(document.getElementById('er-nat-examinees').value) || 0;
 
         preview.textContent =
-            `For the ${month} ${year} Registered Mechanical Engineering Licensure Examination ` +
-            `(RMeLE), Southern Luzon State University (SLSU) recorded an overall passing rate of ` +
+            `For the ${month} ${year} Mechanical Engineering Licensure Examination ` +
+            `(MELE), Southern Luzon State University (SLSU) recorded an overall passing rate of ` +
             `${slsuRate}%, with ${slsuP} passers out of ${slsuE} examinees. The first-time takers ` +
             `achieved a passing rate of ${ftRate}% (${ftP} out of ${ftE}), while the repeaters ` +
             `obtained a passing rate of ${repRate}% (${repP} out of ${repE}). In comparison, the ` +
