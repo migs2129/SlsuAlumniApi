@@ -44,12 +44,36 @@
     <!-- MOBILE BOTTOM NAV -->
     <nav class="mobile-nav">
         <ul>
-            <li onclick="scrollTo('main-page')" class="active"><i class="fa-solid fa-house"></i>Home</li>
-            <li onclick="scrollTo('about')"><i class="fa-solid fa-circle-info"></i>About</li>
-            <li onclick="scrollTo('alumni-list')"><i class="fa-solid fa-list"></i>Alumni</li>
-            <li class="admin-mob" onclick="window.location.href='/admin.html'"><i class="fa-solid fa-lock"></i><span style="font-size:10px;margin-top:2px;">Admin</span></li>
-            <li onclick="scrollTo('employment')"><i class="fa-solid fa-briefcase"></i>Employment</li>
-            <li onclick="scrollTo('board-exam')"><i class="fa-solid fa-id-card"></i>Board</li>
+            <li>
+                <a href="#main-page">
+                    <i class="fa-solid fa-house"></i>Home
+                </a>
+            </li>
+            <li>
+                <a href="#about">
+                    <i class="fa-solid fa-circle-info"></i>About
+                </a>
+            </li>
+            <li>
+                <a href="#alumni-list">
+                    <i class="fa-solid fa-list"></i>Alumni
+                </a>
+            </li>
+            <li class="admin-mob">
+                <a href="/admin.html">
+                    <i class="fa-solid fa-lock"></i>Admin
+                </a>
+            </li>
+            <li>
+                <a href="#employment">
+                    <i class="fa-solid fa-briefcase"></i>Employment
+                </a>
+            </li>
+            <li>
+                <a href="#board-exam">
+                    <i class="fa-solid fa-id-card"></i>Board
+                </a>
+            </li>
         </ul>
     </nav>
 
@@ -364,11 +388,11 @@
                     <div class="wf-col">
                         <h4>Quick Links</h4>
                         <ul>
-                            <li onclick="scrollTo('main-page')">Home</li>
-                            <li onclick="scrollTo('about')">About</li>
-                            <li onclick="scrollTo('alumni-list')">Alumni List</li>
-                            <li onclick="scrollTo('employment')">Employment Data</li>
-                            <li onclick="scrollTo('board-exam')">Board Exam</li>
+                            <li>Home</li>
+                            <li>About</li>
+                            <li>Alumni List</li>
+                            <li>Employment Data</li>
+                            <li>Board Exam</li>
                         </ul>
                     </div>
                     <div class="wf-col">
@@ -559,5 +583,67 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/src/js/app.js" defer></script>
+    <script>
+        (function () {
+            // IDs that map to nav links
+            const sectionIds = [
+                'main-page',
+                'about',
+                'alumni-list',
+                'employment',
+                'board-exam',
+                'contact'
+            ];
+
+            // Desktop nav links (by href)
+            const desktopLinks = document.querySelectorAll('.navigation .nav-content a');
+
+            // Mobile nav list items (by index — matches sectionIds order, skipping admin)
+            const mobileItems = document.querySelectorAll('.mobile-nav li:not(.admin-mob)');
+
+            function setActive(sectionId) {
+                // Desktop
+                desktopLinks.forEach(a => {
+                    a.classList.toggle('active', a.getAttribute('href') === '#' + sectionId);
+                });
+
+                // Mobile — match by href on the <a> inside each li
+                mobileItems.forEach(li => {
+                    const link = li.querySelector('a');
+                    if (link) {
+                        li.classList.toggle(
+                            'active',
+                            link.getAttribute('href') === '#' + sectionId
+                        );
+                    }
+                });
+            }
+
+            // IntersectionObserver — fires when a section enters the viewport
+            const observer = new IntersectionObserver(
+                entries => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            setActive(entry.target.id);
+                        }
+                    });
+                },
+                {
+                    // Trigger when section hits the top 30% of the viewport
+                    rootMargin: '0px 0px -70% 0px',
+                    threshold: 0
+                }
+            );
+
+            sectionIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) observer.observe(el);
+            });
+
+            // Set Home as active on load
+            setActive('main-page');
+        })();
+    </script>
+
 </body>
 </html>
