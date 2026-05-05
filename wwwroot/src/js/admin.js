@@ -16,6 +16,7 @@ let currentSubId = null;
 let chartInstances = {};
 let allExamResults = [];
 let editingExamId = null; // null = add, number = edit
+let topNotchers = [];
 // ── TOKEN KEY ─────────────────────────────────────────────────────────────
 // Single source of truth — always localStorage, never a module variable.
 // This avoids any scoping issue where the in-memory `token` var is null
@@ -370,7 +371,10 @@ function renderAlumniTable() {
             const rt = a.passedLicensureExam === 'Yes' ? 'Passed' : 'Not Passed';
             return `<tr>
                 <td style="color:var(--gt)">${start + i + 1}</td>
-                <td style="font-weight:600">${a.fullName || '—'}</td>
+                <td style="font-weight:600; cursor:pointer; color:var(--blue);"
+    onclick="openAlumniProfile(${a._rowIdx})">
+    ${a.fullName || '—'}
+</td>
                 <td>${a.yearGraduated || '—'}</td>
                 <td>${a.jobTitle || '—'}</td>
                 <td>${a.companyName || '—'}</td>
@@ -438,13 +442,24 @@ function openEditAlumni(rowIdx) {
     setVal('f-month-taken', a.monthTaken);
     setVal('f-year-taken', a.yearTaken);
     setVal('f-passer', a.passerStatus);
-    setVal('f-awards', a.awards);
+    setVal('f-awards', (a.awards || '').replace(/,\s*/g, '\n'));
     setVal('f-jobtitle', a.jobTitle);
     setVal('f-company', a.companyName);
     setVal('f-industry', a.industry);
     setVal('f-emptype', a.employmentType);
     setVal('f-jobloc', a.jobLocation);
     openModal('modal-alumni');
+
+    document.getElementById('notcher-list').innerHTML = '';
+
+    const notcherData =
+        typeof e.topNotchers === 'string'
+            ? JSON.parse(e.topNotchers)
+            : e.topNotchers || [];
+
+    (notcherData).forEach(n => {
+        addNotcherRow(n.name, n.rank);
+    });
 }
 
 async function saveAlumni() {
@@ -468,7 +483,11 @@ async function saveAlumni() {
         monthTaken: gv('f-month-taken'),
         yearTaken: gv('f-year-taken'),
         passerStatus: gv('f-passer'),
-        awards: gv('f-awards'),
+        awards: gv('f-awards')
+            .split('\n')
+            .map(a => a.trim())
+            .filter(a => a)
+            .join(', '),
         jobTitle: gv('f-jobtitle'),
         companyName: gv('f-company'),
         industry: gv('f-industry'),
@@ -511,7 +530,33 @@ function clearAlumniForm() {
         'f-jobtitle', 'f-company', 'f-industry', 'f-emptype', 'f-jobloc'
     ].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 }
+function openAlumniProfile(rowIdx) {
+    const a = allAlumniRows.find(r => r._rowIdx === rowIdx);
+    if (!a) return;
 
+    const awards = a.awards ? a.awards : 'N/A';
+
+    document.getElementById('profile-content').innerHTML = `
+        <h3>${a.fullName}</h3>
+        <p><strong>Batch:</strong> ${a.yearGraduated || '—'}</p>
+        <p><strong>Current Job:</strong> ${a.jobTitle || '—'}</p>
+        <p><strong>Company:</strong> ${a.companyName || '—'}</p>
+
+        <hr>
+
+        <p><strong>Licensure Exam:</strong> ${a.passedLicensureExam || '—'}</p>
+        <p><strong>Passer Status:</strong> ${a.passerStatus || '—'}</p>
+        <p><strong>Awards:</strong> ${awards}</p>
+
+        <hr>
+
+        <p><strong>Employment Type:</strong> ${a.employmentType || '—'}</p>
+        <p><strong>Industry:</strong> ${a.industry || '—'}</p>
+        <p><strong>Location:</strong> ${a.jobLocation || '—'}</p>
+    `;
+
+    openModal('modal-profile');
+}
 // ═══════════════════════════════════════════════════════════════════════════
 //  PENDING SUBMISSIONS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -973,7 +1018,7 @@ async function loadExamResults() {
         const diffSign = e.differenceFromNational >= 0 ? '+' : '';
         return `<tr>
             <td style="font-weight:600">${e.month} ${e.year}</td>
-            <td><span class="badge ${e.dataSource === 'system' ? 'active' : 'pending'}">
+            <td><span class="badge ${e.dataSource === 'System' ? 'active' : 'pending'}">
                 ${e.dataSource}</span></td>
             <td><strong>${e.slsuPassingRate}%</strong></td>
             <td>${e.slsuPassers} / ${e.slsuExaminees}</td>
@@ -1015,10 +1060,9 @@ function openEditExamResult(id) {
 
     setText('modal-examresult-title', `Edit — ${e.month} ${e.year}`);
 
-    // Set data source radio
-    document.getElementById('ds-manual').checked = e.dataSource !== 'system';
-    document.getElementById('ds-system').checked = e.dataSource === 'system';
-    onDataSourceChange(e.dataSource === 'system' ? 'system' : 'manual');
+    document.getElementById('ds-manual').checked = e.dataSource !== 'System';
+    document.getElementById('ds-system').checked = e.dataSource === 'System';
+    onDataSourceChange(e.dataSource === 'System' ? 'System' : 'Manual');
 
     setVal('er-month', e.month);
     setVal('er-year', e.year);
@@ -1030,7 +1074,39 @@ function openEditExamResult(id) {
     setVal('er-rep-passers', e.repeaterPassers);
     setVal('er-nat-examinees', e.nationalExaminees);
     setVal('er-nat-passers', e.nationalPassers);
+
     document.getElementById('er-published').checked = e.isPublished;
+
+    // ─────────────────────────────────────
+    // FIX: TOP NOTCHERS DISPLAY
+    // ─────────────────────────────────────
+    const container = document.getElementById('notcher-list');
+    container.innerHTML = '';
+
+    let notcherData = [];
+
+    try {
+        if (typeof e.topNotchers === 'string') {
+            notcherData = JSON.parse(e.topNotchers || '[]');
+        } else if (Array.isArray(e.topNotchers)) {
+            notcherData = e.topNotchers;
+        }
+    } catch (err) {
+        console.warn('Invalid topNotchers JSON:', e.topNotchers);
+        notcherData = [];
+    }
+
+    notcherData.forEach(n => {
+        addNotcherRow();
+
+        const rows = container.querySelectorAll('.notcher-row');
+        const last = rows[rows.length - 1];
+
+        if (last) {
+            last.querySelector('.notcher-name').value = n.name || '';
+            last.querySelector('.notcher-rank').value = n.rank || '';
+        }
+    });
 
     autoCalcRates();
     openModal('modal-examresult');
@@ -1040,7 +1116,7 @@ function openEditExamResult(id) {
 function onDataSourceChange(value) {
     const pullControls = document.getElementById('system-pull-controls');
     if (pullControls) {
-        pullControls.style.display = value === 'system' ? 'block' : 'none';
+        pullControls.style.display = value === 'System' ? 'block' : 'none';
     }
 }
 
@@ -1132,8 +1208,16 @@ async function saveExamResult() {
 
     if (!month || !year) { toast('Month and year are required.', 'error'); return; }
 
-    const dataSource = document.querySelector('input[name="datasource"]:checked')?.value || 'manual';
+    const dataSource = document.querySelector('input[name="datasource"]:checked')?.value || 'Manual';
+    const notcherNames = [...document.querySelectorAll('.notcher-name')].map(i => i.value.trim());
+    const notcherRanks = [...document.querySelectorAll('.notcher-rank')].map(i => i.value.trim());
 
+    const topNotchers = notcherNames
+        .map((name, i) => ({
+            name,
+            rank: notcherRanks[i]
+        }))
+        .filter(n => n.name); // remove empty
     const payload = {
         month,
         year,
@@ -1146,9 +1230,10 @@ async function saveExamResult() {
         repeaterPassers: parseInt(document.getElementById('er-rep-passers').value) || 0,
         nationalExaminees: parseInt(document.getElementById('er-nat-examinees').value) || 0,
         nationalPassers: parseInt(document.getElementById('er-nat-passers').value) || 0,
-        isPublished: document.getElementById('er-published').checked
+        isPublished: document.getElementById('er-published').checked,
+        topNotchers: JSON.stringify(topNotchers)
     };
-
+    
     const res = editingExamId === null
         ? await apiFetch('/examresults', { method: 'POST', body: JSON.stringify(payload) })
         : await apiFetch(`/examresults/${editingExamId}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -1161,7 +1246,49 @@ async function saveExamResult() {
         toast(res.data?.message || 'Failed to save.', 'error');
     }
 }
+function addNotcherRow(name = '', rank = '') {
+    const container = document.getElementById('notcher-list');
+    if (!container) return;
 
+    const row = document.createElement('div');
+    row.className = 'notcher-row';
+
+    row.innerHTML = `
+        <div class="notcher-card">
+
+            <div class="notcher-header">
+                <div class="notcher-title">
+                    <i class="fa-solid fa-award"></i>
+                    Top Notcher
+                </div>
+
+                <button type="button" class="notcher-remove"
+                    onclick="this.closest('.notcher-row').remove()">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </div>
+
+            <div class="notcher-grid">
+                <div class="notcher-field">
+                    <label>Full Name</label>
+                    <input type="text" class="notcher-name"
+                        placeholder="Enter full name"
+                        value="${name}">
+                </div>
+
+                <div class="notcher-field">
+                    <label>Rank</label>
+                    <input type="text" class="notcher-rank"
+                        placeholder="e.g. Top 3"
+                        value="${rank}">
+                </div>
+            </div>
+
+        </div>
+    `;
+
+    container.appendChild(row);
+}
 // ── TOGGLE PUBLISH ────────────────────────────────────────────
 async function togglePublishExamResult(id) {
     const res = await apiFetch(`/examresults/${id}/toggle-publish`, { method: 'PATCH' });
@@ -1199,6 +1326,7 @@ function clearExamResultForm() {
     if (cb) cb.checked = false;
     const preview = document.getElementById('er-narrative-preview');
     if (preview) preview.textContent = 'Fill in the fields above to see the narrative preview.';
+    document.getElementById('notcher-list').innerHTML = '';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

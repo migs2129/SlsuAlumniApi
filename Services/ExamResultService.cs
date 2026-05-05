@@ -73,6 +73,7 @@ namespace AlumniTrackingAPI.Services
             existing.NationalExaminees = updated.NationalExaminees;
             existing.IsPublished = updated.IsPublished;
             existing.UpdatedAt = DateTime.UtcNow;
+            existing.TopNotchers = updated.TopNotchers;
 
             existing = ComputeFields(existing);
 
@@ -98,8 +99,10 @@ namespace AlumniTrackingAPI.Services
             var abs = Math.Abs(diff);
 
             return $"For {e.Month} {e.Year} Mechanical Engineering Licensure Examination, SLSU recorded a passing rate of {e.SlsuPassingRate}%, which consists of {e.SlsuPassers} Passers and a total of {e.SlsuExaminees} examinees. " +
-                    $"The first time takers passing rate is {Math.Round((double)e.FirstTimePassers / e.FirstTimeExaminees * 100, 2)}%, which consists of {e.FirstTimePassers} passers and a total of {e.FirstTimeExaminees} examinees." +
-                    $"The repeaters passing rate is {Math.Round((double)e.RepeaterPassers / e.RepeaterExaminees * 100, 2)} %.\n"+
+                    $"The first time takers passing rate is {(e.FirstTimeExaminees == 0 ? 0 :
+ Math.Round((double)e.FirstTimePassers / e.FirstTimeExaminees * 100, 2))}%, which consists of {e.FirstTimePassers} passers and a total of {e.FirstTimeExaminees} examinees." +
+                    $"The repeaters passing rate is {(e.RepeaterExaminees == 0 ? 0 :
+ Math.Round((double)e.RepeaterPassers / e.RepeaterExaminees * 100, 2))} %.\n"+
                    $"The {e.Month} {e.Year} Mechanical Engineering Licensure Examination is {abs:F2}% {direction} than the national average of {e.NationalPassingRate}% which consists of {e.NationalPassers} passers over {e.NationalExaminees} examinees).";
         }
         public async Task<bool> DeleteAsync(int id)
@@ -141,7 +144,7 @@ namespace AlumniTrackingAPI.Services
             {
                 Month = month,
                 Year = year,
-                DataSource = "system",
+                DataSource = "System",
                 SlsuPassers = slsuPassers,
                 SlsuExaminees = slsuTotal,
                 FirstTimePassers = firstTime.Count(a => a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase)),

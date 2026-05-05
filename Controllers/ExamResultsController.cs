@@ -38,6 +38,7 @@ namespace AlumniTrackingAPI.Controllers
                     e.NationalPassers,
                     e.NationalExaminees,
                     e.DifferenceFromNational,
+                    e.TopNotchers,
                     narrative = ExamResultService.GenerateNarrative(e)
                 }));
             }
@@ -51,11 +52,18 @@ namespace AlumniTrackingAPI.Controllers
 
         // ── ADMIN — all results including drafts ───────────────────────────
         [HttpGet("all")]
-        [AllowAnonymous]
         public async Task<IActionResult> GetAll()
         {
-            var result = await _svc.GetAllAsync();
-            return Ok(result);
+            try
+            {
+                var result = await _svc.GetAllAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                return StatusCode(500, new { message = "Server error", detail = ex.Message });
+            }
         }
 
         [HttpGet("{id:int}")]
@@ -84,6 +92,7 @@ namespace AlumniTrackingAPI.Controllers
                 result.NationalExaminees,
                 result.DifferenceFromNational,
                 result.IsPublished,
+                result.TopNotchers,
                 narrative = ExamResultService.GenerateNarrative(result)
             });
         }
@@ -94,17 +103,14 @@ namespace AlumniTrackingAPI.Controllers
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(result.Month))
-                    return BadRequest(new { message = "Month is required." });
-                if (result.Year == 0)
-                    return BadRequest(new { message = "Year is required." });
+                Console.WriteLine($"TopNotchers: {result.TopNotchers}");
 
                 var created = await _svc.CreateAsync(result);
                 return Ok(created);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ExamResults] Create error: {ex.Message}");
+                Console.WriteLine(ex.Message);
                 return StatusCode(500, new { message = ex.Message });
             }
         }

@@ -97,5 +97,18 @@ namespace AlumniTrackingAPI.Controllers
                 ? Ok(new { message = "Record deleted." })
                 : StatusCode(500, new { message = "Failed to delete row." });
         }
+        [HttpGet("analytics/top-notchers")]
+        public async Task<IActionResult> GetTopNotchers([FromQuery] string year, [FromQuery] string month)
+        {
+            var all = await _sheets.GetAllAsync();
+
+            var result = all
+                .Where(a => a.YearTaken == year && a.MonthTaken == month)
+                .Where(a => !string.IsNullOrEmpty(a.Awards))
+                .Where(a => a.Awards.Contains("Top"))
+                .ToList();
+
+            return Ok(result);
+        }
     }
 }

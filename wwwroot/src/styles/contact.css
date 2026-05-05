@@ -15,7 +15,132 @@
     border-radius: var(--radius);
     padding: 1.5rem;
 }
+.notcher-row {
+    margin-bottom: 12px;
+}
 
+/* ═══ NOTCHER MODERN UI UPGRADE ═══ */
+
+.notcher-row {
+    margin-bottom: 14px;
+}
+
+.notcher-card {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(226, 232, 240, 0.7);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    transition: all 0.25s ease;
+    backdrop-filter: blur(10px);
+}
+
+    .notcher-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 14px 35px rgba(15, 23, 42, 0.10);
+        border-color: rgba(37, 99, 235, 0.25);
+    }
+
+/* Header */
+.notcher-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.notcher-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.2px;
+}
+
+/* GRID */
+.notcher-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+/* FIELD */
+.notcher-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+    /* LABEL (softer modern look) */
+    .notcher-field label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0.4px;
+    }
+
+    /* INPUT (MAIN UPGRADE) */
+    .notcher-field input {
+        width: 100%;
+        padding: 13px 14px;
+        font-size: 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(203, 213, 225, 0.8);
+        background: linear-gradient(180deg, #ffffff, #f9fafb);
+        color: #0f172a;
+        outline: none;
+        transition: all 0.25s ease;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+        /* HOVER */
+        .notcher-field input:hover {
+            border-color: rgba(148, 163, 184, 0.8);
+        }
+
+        /* FOCUS (premium glow effect) */
+        .notcher-field input:focus {
+            border-color: #2563eb;
+            background: #ffffff;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12), 0 6px 16px rgba(37, 99, 235, 0.10);
+            transform: translateY(-1px);
+        }
+
+        /* PLACEHOLDER */
+        .notcher-field input::placeholder {
+            color: #94a3b8;
+            font-size: 13px;
+        }
+
+/* DELETE BUTTON (modern pill style) */
+.notcher-remove {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.15);
+    color: #dc2626;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+    .notcher-remove:hover {
+        background: rgba(239, 68, 68, 0.15);
+        transform: scale(1.05);
+    }
+
+/* Optional: better spacing in contact card */
+.contact-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1.5rem;
+}
     .contact-card h3 {
         font-size: 0.95rem;
         font-weight: 700;

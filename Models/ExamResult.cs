@@ -11,7 +11,7 @@
         public int Year { get; set; }                 // 2025
 
         // Data source: "manual" or "system"
-        public string DataSource { get; set; } = "manual";
+        public string DataSource { get; set; } = "Manual";
 
         // SLSU results
         public int SlsuPassers { get; set; }
@@ -41,5 +41,8 @@
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // Topnotchers
+        public string? TopNotchers { get; set; }
     }
 }
