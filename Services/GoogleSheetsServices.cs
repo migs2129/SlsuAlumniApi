@@ -1,4 +1,16 @@
-﻿using Google.Apis.Auth.OAuth2;
+﻿// ═══════════════════════════════════════════════════════════════
+//  GoogleSheetsService.cs — FULL REPLACEMENT
+//  All data (Alumni, ExamResults, PendingSubmissions, AdminUsers)
+//  now lives in Google Sheets tabs. No SQLite needed.
+//
+//  SHEET TABS REQUIRED (create these in your Google Sheet):
+//    1. Alumni             ← already exists
+//    2. ExamResults        ← new
+//    3. PendingSubmissions ← new
+//    4. AdminUsers         ← new
+// ═══════════════════════════════════════════════════════════════
+
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
@@ -8,350 +20,57 @@ namespace AlumniTrackingAPI.Services
 {
     public class GoogleSheetsService
     {
-        private readonly SheetsService _sheetsService;
+        private readonly SheetsService _service;
         private readonly string _spreadsheetId;
-        private readonly string _sheetName;
+        private readonly string _alumniSheet;
+
+        // Tab names — must exactly match your Google Sheet tab names
+        private const string TAB_ALUMNI = "Alumni";
+        private const string TAB_EXAM = "ExamResults";
+        private const string TAB_PENDING = "PendingSubmissions";
+        private const string TAB_ADMIN = "AdminUsers";
 
         public GoogleSheetsService(IConfiguration config)
         {
-            var credPath = config["GoogleSheets:CredentialsPath"]!;
-            _spreadsheetId = config["GoogleSheets:SpreadsheetId"]!;
-            _sheetName = config["GoogleSheets:SheetName"]!;
+            var credPath = config["GoogleSheets:CredentialsPath"] ?? "google-credentials.json";
+            _spreadsheetId = config["GoogleSheets:SpreadsheetId"] ?? throw new Exception("SpreadsheetId missing");
+            _alumniSheet = config["GoogleSheets:SheetName"] ?? TAB_ALUMNI;
 
-            GoogleCredential credential;
-            using (var stream = new FileStream(credPath, FileMode.Open, FileAccess.Read))
-            {
-                credential = GoogleCredential
-                    .FromStream(stream)
-                    .CreateScoped(SheetsService.Scope.Spreadsheets);
-            }
+            var credential = GoogleCredential
+                .FromFile(credPath)
+                .CreateScoped(SheetsService.Scope.Spreadsheets);
 
-            _sheetsService = new SheetsService(new BaseClientService.Initializer
+            _service = new SheetsService(new BaseClientService.Initializer
             {
                 HttpClientInitializer = credential,
-                ApplicationName = "AlumniTrackingSystem"
+                ApplicationName = "SLSU Alumni Tracking"
             });
         }
 
-        // ── Confirmed column map (A=0 … W=22) ────────────────────────────
-        //  A(0)   Timestamp
-        //  B(1)   Email Address
-        //  C(2)   Email
-        //  D(3)   Agreement
-        //  E(4)   Full Name
-        //  F(5)   Sex
-        //  G(6)   Date of Birth
-        //  H(7)   Present Address
-        //  I(8)   Contact Number
-        //  J(9)   Year Enrolled
-        //  K(10)  Year Graduated
-        //  L(11)  Graduate School Program
-        //  M(12)  Did you pass the RME?
-        //  N(13)  Month Taken
-        //  O(14)  Year Taken
-        //  P(15)  Passer Status  ("First Time Taker" | "Repeater")
-        //  Q(16)  Awards
-        //  R(17)  Job Title
-        //  S(18)  Company Name
-        //  T(19)  Industry
-        //  U(20)  Employment Type
-        //  V(21)  Job Location
-        //  W(22)  PRIVACY CONSENT
+        // ═══════════════════════════════════════════════════════
+        //  ALUMNI (existing tab)
+        // ═══════════════════════════════════════════════════════
 
-        private async Task<List<Alumni>> FetchAllAsync()
+        public async Task<List<Alumni>> GetAllAsync()
+            => await FetchAlumniAsync();
+
+        private async Task<List<Alumni>> FetchAlumniAsync()
         {
-            var range = $"{_sheetName}!A2:W";
-            var request = _sheetsService.Spreadsheets.Values.Get(_spreadsheetId, range);
+            var range = $"{_alumniSheet}!A2:W";
+            var request = _service.Spreadsheets.Values.Get(_spreadsheetId, range);
             var response = await request.ExecuteAsync();
             var rows = response.Values ?? new List<IList<object>>();
 
             return rows
-                .Where(row => row.Count > 0)            // skip completely empty rows
-                .Select(MapRow)
-                .Where(a => !string.IsNullOrWhiteSpace(a.FullName)) // skip blank-name rows
+                .Where(r => r.Count > 0)
+                .Select(MapAlumniRow)
+                .Where(a => !string.IsNullOrWhiteSpace(a.FullName))
                 .ToList();
         }
 
-
-        // ── Public data methods ───────────────────────────────────────────
-        public async Task<List<Alumni>> GetAllAsync()
+        private static Alumni MapAlumniRow(IList<object> r)
         {
-            // Small delay to let Google Sheets commit the last write
-            await Task.Delay(1200);
-            return await FetchAllAsync();
-        }
-
-        public async Task<List<Alumni>> GetByYearGraduatedAsync(string year)
-        {
-            var all = await FetchAllAsync();
-            return all.Where(a => a.YearGraduated == year).ToList();
-        }
-
-        public async Task<List<Alumni>> SearchByNameAsync(string keyword)
-        {
-            var all = await FetchAllAsync();
-            return all.Where(a =>
-                (a.FullName ?? "").Contains(keyword, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        // ── Analytics ─────────────────────────────────────────────────────
-        public async Task<object> GetSummaryAsync()
-        {
-            var all = await FetchAllAsync();
-            return new
-            {
-                totalAlumni = all.Count,
-                totalEmployed = all.Count(a => !string.IsNullOrEmpty(a.EmploymentType)),
-                totalRmePassers = all.Count(a =>
-                    a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase))
-            };
-        }
-
-        public async Task<Dictionary<string, int>> GetGraduatesPerYearAsync()
-        {
-            var all = await FetchAllAsync();
-            return all
-                .Where(a => !string.IsNullOrEmpty(a.YearGraduated))
-                .GroupBy(a => a.YearGraduated)
-                .OrderBy(g => g.Key)
-                .ToDictionary(g => g.Key, g => g.Count());
-        }
-
-        public async Task<Dictionary<string, int>> GetEmploymentBreakdownAsync()
-        {
-            var all = await FetchAllAsync();
-            return all
-                .Where(a => !string.IsNullOrWhiteSpace(a.EmploymentType))
-                .GroupBy(a => a.EmploymentType.Trim())
-                .ToDictionary(g => g.Key, g => g.Count());
-        }
-
-        public async Task<Dictionary<string, int>> GetIndustryBreakdownAsync()
-        {
-            var all = await FetchAllAsync();
-            return all
-                .Where(a => !string.IsNullOrWhiteSpace(a.Industry))
-                .GroupBy(a => a.Industry.Trim())
-                .OrderByDescending(g => g.Count())
-                .ToDictionary(g => g.Key, g => g.Count());
-        }
-
-        public async Task<object> GetRmePassingRateAsync()
-        {
-            var all = await FetchAllAsync();
-
-            // Only rows that actually answered the RME question
-            var takers = all
-                .Where(a =>
-                    !string.IsNullOrWhiteSpace(a.PassedLicensureExam) &&
-                    (a.PassedLicensureExam.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase) ||
-                     a.PassedLicensureExam.Trim().Equals("No", StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-
-            int total = takers.Count;
-            int passed = takers.Count(a =>
-                a.PassedLicensureExam.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase));
-            int failed = total - passed;
-            double rate = total > 0 ? Math.Round((double)passed / total * 100, 2) : 0;
-
-            // Passer status breakdown — guard against null/empty
-            var byStatus = takers
-                .Where(a =>
-                    a.PassedLicensureExam.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase) &&
-                    !string.IsNullOrWhiteSpace(a.PasserStatus))
-                .GroupBy(a => a.PasserStatus.Trim())
-                .ToDictionary(g => g.Key, g => g.Count());
-
-            // By year — guard against null/empty YearTaken
-            var byYear = takers
-                .Where(a => !string.IsNullOrWhiteSpace(a.YearTaken))
-                .GroupBy(a => a.YearTaken.Trim())
-                .OrderBy(g => g.Key)
-                .Select(yearGroup =>
-                {
-                    int yTakers = yearGroup.Count();
-                    int yPassers = yearGroup.Count(a =>
-                        a.PassedLicensureExam.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase));
-
-                    // Guard: avoid divide-by-zero
-                    double yRate = yTakers > 0
-                        ? Math.Round((double)yPassers / yTakers * 100, 2)
-                        : 0;
-
-                    // By month — guard against null/empty MonthTaken
-                    var byMonth = yearGroup
-                        .Where(a => !string.IsNullOrWhiteSpace(a.MonthTaken))
-                        .GroupBy(a => a.MonthTaken.Trim())
-                        .OrderBy(g => MonthOrder(g.Key))
-                        .Select(mg =>
-                        {
-                            int mTakers = mg.Count();
-                            int mPassers = mg.Count(a =>
-                                a.PassedLicensureExam.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase));
-                            double mRate = mTakers > 0
-                                ? Math.Round((double)mPassers / mTakers * 100, 2)
-                                : 0;
-                            return new { month = mg.Key, takers = mTakers, passers = mPassers, passingRate = mRate };
-                        })
-                        .ToList();
-
-                    return new
-                    {
-                        year = yearGroup.Key,
-                        takers = yTakers,
-                        passers = yPassers,
-                        passingRate = yRate,
-                        byMonth
-                    };
-                })
-                .ToList();
-
-            return new
-            {
-                totalTakers = total,
-                totalPassers = passed,
-                totalFailed = failed,
-                overallPassingRate = rate,
-                byPasserStatus = byStatus,
-                byYear
-            };
-        }
-
-        // ── CRUD ──────────────────────────────────────────────────────────
-        public async Task<bool> AddAlumniAsync(Alumni alumni)
-        {
-            // Use just the sheet name as the range — Sheets API will find
-            // the first completely empty row after existing data and append there.
-            var range = _sheetName;
-
-            var valueRange = new ValueRange
-            {
-                Values = new List<IList<object>> { BuildRow(alumni) }
-            };
-
-            var req = _sheetsService.Spreadsheets.Values.Append(
-                valueRange, _spreadsheetId, range);
-
-            // USER_ENTERED lets Sheets parse dates and numbers naturally
-            req.ValueInputOption =
-                SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
-
-            // INSERT_ROWS ensures a new row is always inserted, never overwriting
-            req.InsertDataOption =
-                SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
-
-            var response = await req.ExecuteAsync();
-
-            Console.WriteLine($"[Sheets] Appended to range: {response.Updates?.UpdatedRange} | Rows: {response.Updates?.UpdatedRows}");
-
-            return true;
-        }
-
-        public async Task<bool> UpdateAlumniAsync(int rowIndex, Alumni alumni)
-        {
-            // rowIndex=1 → sheet row 2 (A2), rowIndex=2 → sheet row 3 (A3), etc.
-            int sheetRow = rowIndex + 1;
-            var range = $"{_sheetName}!A{sheetRow}:W{sheetRow}";
-
-            var valueRange = new ValueRange
-            {
-                Values = new List<IList<object>> { BuildRow(alumni) }
-            };
-
-            var req = _sheetsService.Spreadsheets.Values.Update(
-                valueRange, _spreadsheetId, range);
-            req.ValueInputOption =
-                SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
-
-            await req.ExecuteAsync();
-            return true;
-        }
-
-
-        public async Task<bool> DeleteAlumniAsync(int rowIndex)
-        {
-            // Get the spreadsheet metadata to find the correct sheet by name
-            var spreadsheet = await _sheetsService.Spreadsheets
-                .Get(_spreadsheetId).ExecuteAsync();
-
-            var sheet = spreadsheet.Sheets
-                .FirstOrDefault(s => s.Properties.Title == _sheetName);
-
-            if (sheet == null)
-            {
-                Console.WriteLine($"[Delete] Sheet '{_sheetName}' not found. Available sheets:");
-                foreach (var s in spreadsheet.Sheets)
-                    Console.WriteLine($"  - '{s.Properties.Title}' (id={s.Properties.SheetId})");
-                return false;
-            }
-
-            int sheetId = (int)sheet.Properties.SheetId!;
-            int startIndex = rowIndex; // 0-based: rowIndex 1 → startIndex 1 = sheet row 2
-
-            Console.WriteLine($"[Delete] Sheet='{_sheetName}' SheetId={sheetId} StartIndex={startIndex} (deleting sheet row {startIndex + 1})");
-
-            var batchReq = new BatchUpdateSpreadsheetRequest
-            {
-                Requests = new List<Request>
-        {
-            new Request
-            {
-                DeleteDimension = new DeleteDimensionRequest
-                {
-                    Range = new DimensionRange
-                    {
-                        SheetId    = sheetId,
-                        Dimension  = "ROWS",
-                        StartIndex = startIndex,
-                        EndIndex   = startIndex + 1
-                    }
-                }
-            }
-        }
-            };
-
-            var response = await _sheetsService.Spreadsheets
-                .BatchUpdate(batchReq, _spreadsheetId).ExecuteAsync();
-
-            Console.WriteLine($"[Delete] BatchUpdate complete. Replies: {response.Replies?.Count ?? 0}");
-            return true;
-        }
-
-
-        // ── BuildRow — writes in confirmed column order A–W ───────────────
-        private static IList<object> BuildRow(Alumni a) => new List<object>
-        {
-            a.Timestamp,             // A  (0)
-            a.EmailAddress,          // B  (1)
-            a.Email,                 // C  (2)
-            a.Agreement,             // D  (3)
-            a.FullName,              // E  (4)
-            a.Sex,                   // F  (5)
-            a.DateOfBirth,           // G  (6)
-            a.PresentAddress,        // H  (7)
-            a.ContactNumber,         // I  (8)
-            a.YearEnrolled,          // J  (9)
-            a.YearGraduated,         // K  (10)
-            a.GraduateSchoolProgram, // L  (11)
-            a.PassedLicensureExam,   // M  (12)
-            a.MonthTaken,            // N  (13)
-            a.YearTaken,             // O  (14)
-            a.PasserStatus,          // P  (15)
-            a.Awards,                // Q  (16)
-            a.JobTitle,              // R  (17)
-            a.CompanyName,           // S  (18)
-            a.Industry,              // T  (19)
-            a.EmploymentType,        // U  (20)
-            a.JobLocation,           // V  (21)
-            a.PrivacyConsent         // W  (22)
-        };
-
-        // ── MapRow — reads confirmed column positions ──────────────────────
-        private static Alumni MapRow(IList<object> row)
-        {
-            string Get(int i) => row.Count > i ? row[i]?.ToString() ?? "" : "";
-
+            string Get(int i) => i < r.Count ? r[i]?.ToString()?.Trim() ?? "" : "";
             return new Alumni
             {
                 Timestamp = Get(0),
@@ -380,32 +99,558 @@ namespace AlumniTrackingAPI.Services
             };
         }
 
-        // Only 4 months used in the Google Form
-        private static int MonthOrder(string month) => month.Trim().ToLower() switch
+        private static IList<object> AlumniToRow(Alumni a) => new List<object>
         {
-            "february" or "feb" => 2,
-            "march" or "mar" => 3,
-            "august" or "aug" => 8,
-            "september" or "sep" => 9,
-            _ => 99
+            a.Timestamp, a.EmailAddress, a.Email, a.Agreement,
+            a.FullName, a.Sex, a.DateOfBirth, a.PresentAddress, a.ContactNumber,
+            a.YearEnrolled, a.YearGraduated, a.GraduateSchoolProgram,
+            a.PassedLicensureExam, a.MonthTaken, a.YearTaken, a.PasserStatus, a.Awards,
+            a.JobTitle, a.CompanyName, a.Industry, a.EmploymentType, a.JobLocation,
+            a.PrivacyConsent
         };
+
+        public async Task<bool> AddAlumniAsync(Alumni alumni)
+        {
+            var vr = new ValueRange { Values = new List<IList<object>> { AlumniToRow(alumni) } };
+            var req = _service.Spreadsheets.Values.Append(vr, _spreadsheetId, _alumniSheet);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+            req.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
+            await req.ExecuteAsync();
+            return true;
+        }
+
+        public async Task<bool> UpdateAlumniAsync(int rowIndex, Alumni alumni)
+        {
+            int sheetRow = rowIndex + 1;
+            var range = $"{_alumniSheet}!A{sheetRow}:W{sheetRow}";
+            var vr = new ValueRange { Values = new List<IList<object>> { AlumniToRow(alumni) } };
+            var req = _service.Spreadsheets.Values.Update(vr, _spreadsheetId, range);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
+            await req.ExecuteAsync();
+            return true;
+        }
+
+        public async Task<bool> DeleteAlumniAsync(int rowIndex)
+            => await DeleteRowFromTab(_alumniSheet, rowIndex);
+
         public async Task<List<(int RowIndex, Alumni Alumni)>> GetAllWithRowIndexAsync()
         {
-            var range = $"{_sheetName}!A2:W";
-            var request = _sheetsService.Spreadsheets.Values.Get(_spreadsheetId, range);
+            var range = $"{_alumniSheet}!A2:W";
+            var request = _service.Spreadsheets.Values.Get(_spreadsheetId, range);
             var response = await request.ExecuteAsync();
             var rows = response.Values ?? new List<IList<object>>();
 
             return rows
-                .Select((row, i) => (RowIndex: i + 1, Alumni: MapRow(row)))
+                .Select((row, i) => (RowIndex: i + 1, Alumni: MapAlumniRow(row)))
                 .Where(x => !string.IsNullOrWhiteSpace(x.Alumni.FullName))
                 .ToList();
         }
 
-        // Deletes a single row by its 1-based index from the sheet
-        // (same as DeleteAlumniAsync but named clearly for the sync flow)
         public async Task<bool> DeleteRowAsync(int rowIndex)
-            => await DeleteAlumniAsync(rowIndex);
+            => await DeleteRowFromTab(_alumniSheet, rowIndex);
 
+        // ── Analytics ────────────────────────────────────────────────────
+        public async Task<object> GetSummaryAsync()
+        {
+            var all = await FetchAlumniAsync();
+            return new
+            {
+                totalAlumni = all.Count,
+                totalEmployed = all.Count(a => !string.IsNullOrWhiteSpace(a.EmploymentType)),
+                totalRmePassers = all.Count(a =>
+                    a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase))
+            };
+        }
+
+        public async Task<Dictionary<string, int>> GetGraduatesPerYearAsync()
+        {
+            var all = await FetchAlumniAsync();
+            return all
+                .Where(a => !string.IsNullOrWhiteSpace(a.YearGraduated))
+                .GroupBy(a => a.YearGraduated.Trim())
+                .OrderBy(g => g.Key)
+                .ToDictionary(g => g.Key, g => g.Count());
+        }
+
+        public async Task<Dictionary<string, int>> GetEmploymentBreakdownAsync()
+        {
+            var all = await FetchAlumniAsync();
+            return all
+                .Where(a => !string.IsNullOrWhiteSpace(a.EmploymentType))
+                .GroupBy(a => a.EmploymentType.Trim())
+                .ToDictionary(g => g.Key, g => g.Count());
+        }
+
+        public async Task<Dictionary<string, int>> GetIndustryBreakdownAsync()
+        {
+            var all = await FetchAlumniAsync();
+            return all
+                .Where(a => !string.IsNullOrWhiteSpace(a.Industry))
+                .GroupBy(a => a.Industry.Trim())
+                .OrderByDescending(g => g.Count())
+                .ToDictionary(g => g.Key, g => g.Count());
+        }
+
+        public async Task<object> GetRmePassingRateAsync()
+        {
+            var all = await FetchAlumniAsync();
+            var takers = all.Where(a =>
+                a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase) ||
+                a.PassedLicensureExam.Equals("No", StringComparison.OrdinalIgnoreCase)).ToList();
+
+            int total = takers.Count;
+            int passed = takers.Count(a =>
+                a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase));
+            double rate = total > 0 ? Math.Round((double)passed / total * 100, 2) : 0;
+
+            var byYear = takers
+                .Where(a => !string.IsNullOrWhiteSpace(a.YearTaken))
+                .GroupBy(a => a.YearTaken.Trim())
+                .OrderBy(g => g.Key)
+                .Select(yg =>
+                {
+                    int yT = yg.Count();
+                    int yP = yg.Count(a => a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase));
+                    return new
+                    {
+                        year = yg.Key,
+                        takers = yT,
+                        passers = yP,
+                        passingRate = yT > 0 ? Math.Round((double)yP / yT * 100, 2) : 0,
+                        byMonth = yg.Where(a => !string.IsNullOrWhiteSpace(a.MonthTaken))
+                            .GroupBy(a => a.MonthTaken.Trim())
+                            .Select(mg =>
+                            {
+                                int mT = mg.Count();
+                                int mP = mg.Count(a => a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase));
+                                return new { month = mg.Key, takers = mT, passers = mP, passingRate = mT > 0 ? Math.Round((double)mP / mT * 100, 2) : 0 };
+                            }).ToList()
+                    };
+                }).ToList();
+
+            return new { totalTakers = total, totalPassers = passed, overallPassingRate = rate, byYear };
+        }
+
+        public async Task<List<Alumni>> GetByYearGraduatedAsync(string year)
+        {
+            var all = await FetchAlumniAsync();
+            return all.Where(a => a.YearGraduated == year).ToList();
+        }
+
+        public async Task<List<Alumni>> SearchByNameAsync(string keyword)
+        {
+            var all = await FetchAlumniAsync();
+            return all.Where(a =>
+                (a.FullName ?? "").Contains(keyword, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        // ═══════════════════════════════════════════════════════
+        //  EXAM RESULTS (new tab: ExamResults)
+        //
+        //  Columns A-Z+ stored as:
+        //  A=Id, B=Month, C=Year, D=DataSource,
+        //  E=SlsuPassers, F=SlsuExaminees, G=SlsuPassingRate,
+        //  H=FirstTimePassers, I=FirstTimeExaminees, J=FirstTimePassingRate,
+        //  K=RepeaterPassers, L=RepeaterExaminees, M=RepeaterPassingRate,
+        //  N=NationalPassers, O=NationalExaminees, P=NationalPassingRate,
+        //  Q=DifferenceFromNational, R=IsPublished,
+        //  S=TopNotchers(JSON), T=CreatedAt, U=UpdatedAt
+        // ═══════════════════════════════════════════════════════
+
+        public async Task<List<ExamResult>> GetAllExamResultsAsync()
+        {
+            var range = $"{TAB_EXAM}!A2:U";
+            var response = await _service.Spreadsheets.Values.Get(_spreadsheetId, range).ExecuteAsync();
+            var rows = response.Values ?? new List<IList<object>>();
+            return rows.Where(r => r.Count > 0).Select(MapExamRow).ToList();
+        }
+
+        public async Task<ExamResult?> GetExamResultByIdAsync(int id)
+        {
+            var all = await GetAllExamResultsAsync();
+            return all.FirstOrDefault(e => e.Id == id);
+        }
+
+        public async Task<ExamResult> CreateExamResultAsync(ExamResult e)
+        {
+            // Auto-generate ID (max existing + 1)
+            var all = await GetAllExamResultsAsync();
+            e.Id = all.Count > 0 ? all.Max(x => x.Id) + 1 : 1;
+            e.CreatedAt = DateTime.UtcNow;
+            e.UpdatedAt = DateTime.UtcNow;
+            e = ComputeExamFields(e);
+
+            var vr = new ValueRange { Values = new List<IList<object>> { ExamToRow(e) } };
+            var req = _service.Spreadsheets.Values.Append(vr, _spreadsheetId, TAB_EXAM);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+            req.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
+            await req.ExecuteAsync();
+            return e;
+        }
+
+        public async Task<ExamResult?> UpdateExamResultAsync(int id, ExamResult updated)
+        {
+            var (rowIndex, existing) = await FindExamRowIndex(id);
+            if (existing == null) return null;
+
+            updated.Id = id;
+            updated.CreatedAt = existing.CreatedAt;
+            updated.UpdatedAt = DateTime.UtcNow;
+            updated = ComputeExamFields(updated);
+
+            int sheetRow = rowIndex + 1;
+            var range = $"{TAB_EXAM}!A{sheetRow}:U{sheetRow}";
+            var vr = new ValueRange { Values = new List<IList<object>> { ExamToRow(updated) } };
+            var req = _service.Spreadsheets.Values.Update(vr, _spreadsheetId, range);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
+            await req.ExecuteAsync();
+            return updated;
+        }
+
+        public async Task<bool> ToggleExamPublishedAsync(int id)
+        {
+            var (rowIndex, existing) = await FindExamRowIndex(id);
+            if (existing == null) return false;
+
+            existing.IsPublished = !existing.IsPublished;
+            existing.UpdatedAt = DateTime.UtcNow;
+
+            int sheetRow = rowIndex + 1;
+            var range = $"{TAB_EXAM}!A{sheetRow}:U{sheetRow}";
+            var vr = new ValueRange { Values = new List<IList<object>> { ExamToRow(existing) } };
+            var req = _service.Spreadsheets.Values.Update(vr, _spreadsheetId, range);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
+            await req.ExecuteAsync();
+            return true;
+        }
+
+        public async Task<bool> DeleteExamResultAsync(int id)
+        {
+            var (rowIndex, existing) = await FindExamRowIndex(id);
+            if (existing == null) return false;
+            return await DeleteRowFromTab(TAB_EXAM, rowIndex);
+        }
+
+        private async Task<(int RowIndex, ExamResult? Result)> FindExamRowIndex(int id)
+        {
+            var range = $"{TAB_EXAM}!A2:U";
+            var response = await _service.Spreadsheets.Values.Get(_spreadsheetId, range).ExecuteAsync();
+            var rows = response.Values ?? new List<IList<object>>();
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                if (r.Count > 0 && int.TryParse(r[0]?.ToString(), out var rowId) && rowId == id)
+                    return (i + 1, MapExamRow(r));
+            }
+            return (0, null);
+        }
+
+        private static ExamResult MapExamRow(IList<object> r)
+        {
+            string Get(int i) => i < r.Count ? r[i]?.ToString()?.Trim() ?? "" : "";
+            int GetInt(int i) => int.TryParse(Get(i), out var v) ? v : 0;
+            double GetDbl(int i) => double.TryParse(Get(i), out var v) ? v : 0;
+            bool GetBool(int i) => Get(i).Equals("true", StringComparison.OrdinalIgnoreCase);
+
+            return new ExamResult
+            {
+                Id = GetInt(0),
+                Month = Get(1),
+                Year = GetInt(2),
+                DataSource = Get(3),
+                SlsuPassers = GetInt(4),
+                SlsuExaminees = GetInt(5),
+                SlsuPassingRate = GetDbl(6),
+                FirstTimePassers = GetInt(7),
+                FirstTimeExaminees = GetInt(8),
+                FirstTimePassingRate = GetDbl(9),
+                RepeaterPassers = GetInt(10),
+                RepeaterExaminees = GetInt(11),
+                RepeaterPassingRate = GetDbl(12),
+                NationalPassers = GetInt(13),
+                NationalExaminees = GetInt(14),
+                NationalPassingRate = GetDbl(15),
+                DifferenceFromNational = GetDbl(16),
+                IsPublished = GetBool(17),
+                TopNotchers = Get(18),   // stored as JSON string
+                CreatedAt = DateTime.TryParse(Get(19), out var ca) ? ca : DateTime.UtcNow,
+                UpdatedAt = DateTime.TryParse(Get(20), out var ua) ? ua : DateTime.UtcNow
+            };
+        }
+
+        private static IList<object> ExamToRow(ExamResult e) => new List<object>
+        {
+            e.Id, e.Month, e.Year, e.DataSource,
+            e.SlsuPassers, e.SlsuExaminees, e.SlsuPassingRate,
+            e.FirstTimePassers, e.FirstTimeExaminees, e.FirstTimePassingRate,
+            e.RepeaterPassers, e.RepeaterExaminees, e.RepeaterPassingRate,
+            e.NationalPassers, e.NationalExaminees, e.NationalPassingRate,
+            e.DifferenceFromNational,
+            e.IsPublished.ToString().ToLower(),
+            e.TopNotchers ?? "[]",
+            e.CreatedAt.ToString("O"),
+            e.UpdatedAt.ToString("O")
+        };
+
+        private static ExamResult ComputeExamFields(ExamResult e)
+        {
+            e.SlsuPassingRate = e.SlsuExaminees > 0 ? Math.Round((double)e.SlsuPassers / e.SlsuExaminees * 100, 2) : 0;
+            e.FirstTimePassingRate = e.FirstTimeExaminees > 0 ? Math.Round((double)e.FirstTimePassers / e.FirstTimeExaminees * 100, 2) : 0;
+            e.RepeaterPassingRate = e.RepeaterExaminees > 0 ? Math.Round((double)e.RepeaterPassers / e.RepeaterExaminees * 100, 2) : 0;
+            e.NationalPassingRate = e.NationalExaminees > 0 ? Math.Round((double)e.NationalPassers / e.NationalExaminees * 100, 2) : 0;
+            e.DifferenceFromNational = Math.Round(e.SlsuPassingRate - e.NationalPassingRate, 2);
+            return e;
+        }
+
+        // ═══════════════════════════════════════════════════════
+        //  PENDING SUBMISSIONS (new tab: PendingSubmissions)
+        //
+        //  Columns: A=Id, B=FullName, C=Sex, D=DateOfBirth,
+        //  E=PresentAddress, F=ContactNumber, G=Email,
+        //  H=YearEnrolled, I=YearGraduated, J=GraduateSchoolProgram,
+        //  K=PassedLicensureExam, L=MonthTaken, M=YearTaken,
+        //  N=PasserStatus, O=Awards, P=JobTitle, Q=CompanyName,
+        //  R=Industry, S=EmploymentType, T=JobLocation,
+        //  U=Status, V=RejectionReason, W=SubmittedAt,
+        //  X=ReviewedAt, Y=ReviewedBy
+        // ═══════════════════════════════════════════════════════
+
+        public async Task<List<PendingSubmission>> GetAllPendingAsync()
+        {
+            var range = $"{TAB_PENDING}!A2:Y";
+            var response = await _service.Spreadsheets.Values.Get(_spreadsheetId, range).ExecuteAsync();
+            var rows = response.Values ?? new List<IList<object>>();
+            return rows.Where(r => r.Count > 0).Select(MapPendingRow)
+                .OrderByDescending(s => s.SubmittedAt).ToList();
+        }
+
+        public async Task<PendingSubmission> AddPendingAsync(PendingSubmission sub)
+        {
+            var all = await GetAllPendingAsync();
+            sub.Id = all.Count > 0 ? all.Max(s => s.Id) + 1 : 1;
+            sub.SubmittedAt = DateTime.UtcNow;
+            sub.Status = "Pending";
+
+            var vr = new ValueRange { Values = new List<IList<object>> { PendingToRow(sub) } };
+            var req = _service.Spreadsheets.Values.Append(vr, _spreadsheetId, TAB_PENDING);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+            req.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
+            await req.ExecuteAsync();
+            return sub;
+        }
+
+        public async Task<bool> UpdatePendingStatusAsync(int id, string status,
+            string? reviewedBy = null, string? rejectionReason = null)
+        {
+            var (rowIndex, sub) = await FindPendingRowIndex(id);
+            if (sub == null) return false;
+
+            sub.Status = status;
+            sub.ReviewedBy = reviewedBy;
+            sub.RejectionReason = rejectionReason;
+            sub.ReviewedAt = DateTime.UtcNow;
+
+            int sheetRow = rowIndex + 1;
+            var range = $"{TAB_PENDING}!A{sheetRow}:Y{sheetRow}";
+            var vr = new ValueRange { Values = new List<IList<object>> { PendingToRow(sub) } };
+            var req = _service.Spreadsheets.Values.Update(vr, _spreadsheetId, range);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
+            await req.ExecuteAsync();
+            return true;
+        }
+
+        public async Task<bool> DeletePendingAsync(int id)
+        {
+            var (rowIndex, sub) = await FindPendingRowIndex(id);
+            if (sub == null) return false;
+            return await DeleteRowFromTab(TAB_PENDING, rowIndex);
+        }
+
+        private async Task<(int RowIndex, PendingSubmission? Sub)> FindPendingRowIndex(int id)
+        {
+            var range = $"{TAB_PENDING}!A2:Y";
+            var response = await _service.Spreadsheets.Values.Get(_spreadsheetId, range).ExecuteAsync();
+            var rows = response.Values ?? new List<IList<object>>();
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                if (r.Count > 0 && int.TryParse(r[0]?.ToString(), out var rowId) && rowId == id)
+                    return (i + 1, MapPendingRow(r));
+            }
+            return (0, null);
+        }
+
+        private static PendingSubmission MapPendingRow(IList<object> r)
+        {
+            string Get(int i) => i < r.Count ? r[i]?.ToString()?.Trim() ?? "" : "";
+            return new PendingSubmission
+            {
+                Id = int.TryParse(Get(0), out var id) ? id : 0,
+                FullName = Get(1),
+                Sex = Get(2),
+                DateOfBirth = Get(3),
+                PresentAddress = Get(4),
+                ContactNumber = Get(5),
+                Email = Get(6),
+                YearEnrolled = Get(7),
+                YearGraduated = Get(8),
+                GraduateSchoolProgram = Get(9),
+                PassedLicensureExam = Get(10),
+                MonthTaken = Get(11),
+                YearTaken = Get(12),
+                PasserStatus = Get(13),
+                Awards = Get(14),
+                JobTitle = Get(15),
+                CompanyName = Get(16),
+                Industry = Get(17),
+                EmploymentType = Get(18),
+                JobLocation = Get(19),
+                Status = Get(20),
+                RejectionReason = Get(21),
+                SubmittedAt = DateTime.TryParse(Get(22), out var sa) ? sa : DateTime.UtcNow,
+                ReviewedAt = DateTime.TryParse(Get(23), out var ra) ? ra : null,
+                ReviewedBy = Get(24)
+            };
+        }
+
+        private static IList<object> PendingToRow(PendingSubmission s) => new List<object>
+        {
+            s.Id, s.FullName, s.Sex, s.DateOfBirth, s.PresentAddress,
+            s.ContactNumber, s.Email, s.YearEnrolled, s.YearGraduated,
+            s.GraduateSchoolProgram, s.PassedLicensureExam, s.MonthTaken,
+            s.YearTaken, s.PasserStatus, s.Awards, s.JobTitle, s.CompanyName,
+            s.Industry, s.EmploymentType, s.JobLocation,
+            s.Status, s.RejectionReason ?? "",
+            s.SubmittedAt.ToString("O"),
+            s.ReviewedAt?.ToString("O") ?? "",
+            s.ReviewedBy ?? ""
+        };
+
+        // ═══════════════════════════════════════════════════════
+        //  ADMIN USERS (new tab: AdminUsers)
+        //  Columns: A=Id, B=Username, C=PasswordHash, D=FullName,
+        //           E=Role, F=CreatedAt, G=IsActive
+        // ═══════════════════════════════════════════════════════
+
+        public async Task<List<AdminUser>> GetAllAdminsAsync()
+        {
+            var range = $"{TAB_ADMIN}!A2:G";
+            var response = await _service.Spreadsheets.Values.Get(_spreadsheetId, range).ExecuteAsync();
+            var rows = response.Values ?? new List<IList<object>>();
+            return rows.Where(r => r.Count > 0).Select(MapAdminRow).ToList();
+        }
+
+        public async Task<AdminUser?> GetAdminByUsernameAsync(string username)
+        {
+            var all = await GetAllAdminsAsync();
+            return all.FirstOrDefault(a =>
+                a.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public async Task<AdminUser> CreateAdminAsync(AdminUser admin)
+        {
+            var all = await GetAllAdminsAsync();
+            admin.Id = all.Count > 0 ? all.Max(a => a.Id) + 1 : 1;
+
+            var vr = new ValueRange { Values = new List<IList<object>> { AdminToRow(admin) } };
+            var req = _service.Spreadsheets.Values.Append(vr, _spreadsheetId, TAB_ADMIN);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.AppendRequest.ValueInputOptionEnum.USERENTERED;
+            req.InsertDataOption = SpreadsheetsResource.ValuesResource.AppendRequest.InsertDataOptionEnum.INSERTROWS;
+            await req.ExecuteAsync();
+            return admin;
+        }
+
+        public async Task<bool> UpdateAdminAsync(AdminUser admin)
+        {
+            var (rowIndex, _) = await FindAdminRowIndex(admin.Id);
+            if (rowIndex == 0) return false;
+
+            int sheetRow = rowIndex + 1;
+            var range = $"{TAB_ADMIN}!A{sheetRow}:G{sheetRow}";
+            var vr = new ValueRange { Values = new List<IList<object>> { AdminToRow(admin) } };
+            var req = _service.Spreadsheets.Values.Update(vr, _spreadsheetId, range);
+            req.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
+            await req.ExecuteAsync();
+            return true;
+        }
+
+        public async Task<bool> DeleteAdminAsync(int id)
+        {
+            var (rowIndex, admin) = await FindAdminRowIndex(id);
+            if (admin == null || admin.Role == "superadmin") return false;
+            return await DeleteRowFromTab(TAB_ADMIN, rowIndex);
+        }
+
+        private async Task<(int RowIndex, AdminUser? Admin)> FindAdminRowIndex(int id)
+        {
+            var range = $"{TAB_ADMIN}!A2:G";
+            var response = await _service.Spreadsheets.Values.Get(_spreadsheetId, range).ExecuteAsync();
+            var rows = response.Values ?? new List<IList<object>>();
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                if (r.Count > 0 && int.TryParse(r[0]?.ToString(), out var rowId) && rowId == id)
+                    return (i + 1, MapAdminRow(r));
+            }
+            return (0, null);
+        }
+
+        private static AdminUser MapAdminRow(IList<object> r)
+        {
+            string Get(int i) => i < r.Count ? r[i]?.ToString()?.Trim() ?? "" : "";
+            return new AdminUser
+            {
+                Id = int.TryParse(Get(0), out var id) ? id : 0,
+                Username = Get(1),
+                PasswordHash = Get(2),
+                FullName = Get(3),
+                Role = Get(4),
+                CreatedAt = DateTime.TryParse(Get(5), out var ca) ? ca : DateTime.UtcNow,
+                IsActive = !Get(6).Equals("false", StringComparison.OrdinalIgnoreCase)
+            };
+        }
+
+        private static IList<object> AdminToRow(AdminUser a) => new List<object>
+        {
+            a.Id, a.Username, a.PasswordHash, a.FullName,
+            a.Role, a.CreatedAt.ToString("O"), a.IsActive.ToString().ToLower()
+        };
+
+        // ═══════════════════════════════════════════════════════
+        //  SHARED HELPER — delete a row from any tab
+        // ═══════════════════════════════════════════════════════
+
+        private async Task<bool> DeleteRowFromTab(string tabName, int rowIndex)
+        {
+            var spreadsheet = await _service.Spreadsheets.Get(_spreadsheetId).ExecuteAsync();
+            var sheet = spreadsheet.Sheets.FirstOrDefault(s => s.Properties.Title == tabName);
+            if (sheet == null) return false;
+
+            int sheetId = (int)sheet.Properties.SheetId!;
+            int startIndex = rowIndex; // 0-based; rowIndex 1 = sheet row 2
+
+            var batchReq = new BatchUpdateSpreadsheetRequest
+            {
+                Requests = new List<Request>
+                {
+                    new Request
+                    {
+                        DeleteDimension = new DeleteDimensionRequest
+                        {
+                            Range = new DimensionRange
+                            {
+                                SheetId    = sheetId,
+                                Dimension  = "ROWS",
+                                StartIndex = startIndex,
+                                EndIndex   = startIndex + 1
+                            }
+                        }
+                    }
+                }
+            };
+
+            await _service.Spreadsheets.BatchUpdate(batchReq, _spreadsheetId).ExecuteAsync();
+            return true;
+        }
     }
 }

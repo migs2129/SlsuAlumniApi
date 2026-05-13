@@ -1,29 +1,33 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+﻿using AlumniTrackingAPI.Models;
+using AlumniTrackingAPI.Services;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using AlumniTrackingAPI.Data;
-using AlumniTrackingAPI.Models;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AlumniTrackingAPI.Services
 {
     public class AuthService
     {
-        private readonly AlumniDbContext _db;
-        private readonly IConfiguration  _config;
+        private readonly GoogleSheetsService _sheets;
+        private readonly IConfiguration _config;
 
-        public AuthService(AlumniDbContext db, IConfiguration config)
+        public AuthService(GoogleSheetsService sheets, IConfiguration config)
         {
-            _db     = db;
+            _sheets = sheets;
             _config = config;
         }
 
-        // ── Login — returns JWT or null ──────────────────────────────────
+        // ── Login ─────────────────────────────────────────────────────────
         public async Task<string?> LoginAsync(string username, string password)
         {
-            var user = await _db.AdminUsers
-                .FirstOrDefaultAsync(u => u.Username == username && u.IsActive);
+            // Seed superadmin on first login attempt if tab is empty
+            await SeedSuperadminIfNeededAsync();
+
+            var user = (await _sheets.GetAllAdminsAsync())
+                .FirstOrDefault(u =>
+                    u.Username.Equals(username, StringComparison.OrdinalIgnoreCase) &&
+                    u.IsActive);
 
             if (user == null) return null;
             if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash)) return null;
@@ -31,66 +35,80 @@ namespace AlumniTrackingAPI.Services
             return GenerateToken(user);
         }
 
-        // ── Create admin account ─────────────────────────────────────────
+        // ── Create admin ───────────────────────────────────────────────────
         public async Task<(bool success, string message)> CreateAdminAsync(
             string username, string password, string fullName, string role)
         {
-            bool exists = await _db.AdminUsers.AnyAsync(u => u.Username == username);
+            var all = await _sheets.GetAllAdminsAsync();
+            bool exists = all.Any(u =>
+                u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
             if (exists) return (false, "Username already exists.");
 
             var admin = new AdminUser
             {
-                Username     = username,
+                Username = username,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-                FullName     = fullName,
-                Role         = role,
-                CreatedAt    = DateTime.UtcNow,
-                IsActive     = true
+                FullName = fullName,
+                Role = role,
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true
             };
 
-            _db.AdminUsers.Add(admin);
-            await _db.SaveChangesAsync();
+            await _sheets.CreateAdminAsync(admin);
             return (true, "Admin account created.");
         }
 
-        // ── Get all admins ───────────────────────────────────────────────
+        // ── Get all admins ─────────────────────────────────────────────────
         public async Task<List<AdminUser>> GetAllAdminsAsync()
-            => await _db.AdminUsers.OrderBy(u => u.CreatedAt).ToListAsync();
+            => await _sheets.GetAllAdminsAsync();
 
-        // ── Toggle active status ─────────────────────────────────────────
+        // ── Toggle active ──────────────────────────────────────────────────
         public async Task<bool> ToggleActiveAsync(int id)
         {
-            var user = await _db.AdminUsers.FindAsync(id);
+            var all = await _sheets.GetAllAdminsAsync();
+            var user = all.FirstOrDefault(u => u.Id == id);
             if (user == null || user.Role == "superadmin") return false;
             user.IsActive = !user.IsActive;
-            await _db.SaveChangesAsync();
-            return true;
+            return await _sheets.UpdateAdminAsync(user);
         }
 
-        // ── Delete admin ─────────────────────────────────────────────────
+        // ── Delete admin ───────────────────────────────────────────────────
         public async Task<bool> DeleteAdminAsync(int id)
-        {
-            var user = await _db.AdminUsers.FindAsync(id);
-            if (user == null || user.Role == "superadmin") return false;
-            _db.AdminUsers.Remove(user);
-            await _db.SaveChangesAsync();
-            return true;
-        }
+            => await _sheets.DeleteAdminAsync(id);
 
-        // ── Change password ──────────────────────────────────────────────
+        // ── Change password ────────────────────────────────────────────────
         public async Task<bool> ChangePasswordAsync(int id, string newPassword)
         {
-            var user = await _db.AdminUsers.FindAsync(id);
+            var all = await _sheets.GetAllAdminsAsync();
+            var user = all.FirstOrDefault(u => u.Id == id);
             if (user == null) return false;
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-            await _db.SaveChangesAsync();
-            return true;
+            return await _sheets.UpdateAdminAsync(user);
         }
 
-        // ── JWT generator ────────────────────────────────────────────────
+        // ── Seed superadmin if AdminUsers tab is empty ─────────────────────
+        private async Task SeedSuperadminIfNeededAsync()
+        {
+            var all = await _sheets.GetAllAdminsAsync();
+            if (all.Any()) return;
+
+            var superadmin = new AdminUser
+            {
+                Username = "superadmin",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@1234"),
+                FullName = "Super Administrator",
+                Role = "superadmin",
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true
+            };
+            await _sheets.CreateAdminAsync(superadmin);
+            Console.WriteLine("[Auth] Superadmin seeded to AdminUsers tab.");
+        }
+
+        // ── JWT generator ──────────────────────────────────────────────────
         private string GenerateToken(AdminUser user)
         {
-            var key   = new SymmetricSecurityKey(
+            var key = new SymmetricSecurityKey(
                             Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
@@ -103,10 +121,10 @@ namespace AlumniTrackingAPI.Services
             };
 
             var token = new JwtSecurityToken(
-                issuer:             _config["Jwt:Issuer"],
-                audience:           _config["Jwt:Audience"],
-                claims:             claims,
-                expires:            DateTime.UtcNow.AddHours(8),
+                issuer: _config["Jwt:Issuer"],
+                audience: _config["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddHours(8),
                 signingCredentials: creds
             );
 

@@ -296,19 +296,35 @@ async function loadTopNotchers(year, month) {
     const container = document.getElementById('rme-top-notchers-list');
     if (!container) return;
 
-    container.innerHTML = `<p style="color:var(--gray-text); font-size:13px;">Loading...</p>`;
+    container.innerHTML = `
+        <p style="color:var(--gray-text); font-size:13px;">Loading...</p>
+    `;
 
-    const data = await apiFetch(
+    const res = await apiFetch(
         `/alumni/analytics/top-notchers?year=${year}&month=${month}`
     );
+
+    if (!res.ok) {
+        container.innerHTML = `
+            <p style="color:red; font-size:13px;">
+                Failed to load top notchers.
+            </p>`;
+        return;
+    }
 
     let topNotchers = [];
 
     try {
+        const data = res.data;
+
+        // ✅ handle both array and JSON string safely
         topNotchers = Array.isArray(data)
             ? data
-            : JSON.parse(data || "[]");
+            : typeof data === 'string'
+                ? JSON.parse(data)
+                : [];
     } catch (e) {
+        console.error('TopNotchers parse error:', e);
         topNotchers = [];
     }
 
@@ -320,24 +336,32 @@ async function loadTopNotchers(year, month) {
         return;
     }
 
-    container.innerHTML = topNotchers.map(a => `
-        <div class="notcher-card">
+    container.innerHTML = topNotchers.map(a => {
+        const medal =
+            a.awards?.toLowerCase().includes('top 1') ? '🥇' :
+                a.awards?.toLowerCase().includes('top 2') ? '🥈' :
+                    a.awards?.toLowerCase().includes('top 3') ? '🥉' : '🏅';
+
+        return `
+        <div class="notcher-card gold">
             <div class="notcher-rank">
-                <i class="fa-solid fa-trophy"></i>
-                ${a.awards}
+                ${medal}
+                ${a.awards || 'Top Notcher'}
             </div>
 
             <div class="notcher-body">
                 <div class="notcher-name-box">
-                    ${a.fullName}
+                    ${a.fullName || 'Unknown'}
                 </div>
 
                 <div class="notcher-sub">
-                    ${a.passerStatus} · ${a.companyName || '—'}
+                    ${a.passerStatus || ''} 
+                    ${a.companyName ? '· ' + a.companyName : ''}
                 </div>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 // ── ALUMNI PROFILE MODAL ──────────────────────────────────────
 function openAlumniProfile(index, year) {

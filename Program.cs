@@ -1,9 +1,7 @@
 ﻿using System.Text;
-using AlumniTrackingAPI.Data;
 using AlumniTrackingAPI.Services;
 using AlumniTrackingAPI.BackgroundServices;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,18 +10,15 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// ── All data lives in Google Sheets — no SQLite / EF Core needed ──────────
 builder.Services.AddSingleton<GoogleSheetsService>();
-
-builder.Services.AddDbContext<AlumniDbContext>(options =>
-    options.UseSqlite(
-        builder.Configuration.GetConnectionString("Default") ?? "Data Source=alumni.db"));
-
 builder.Services.AddScoped<AuthService>();
-builder.Services.AddScoped<ExamResultService>();
 builder.Services.AddScoped<SubmissionService>();
+builder.Services.AddScoped<ExamResultService>();
 builder.Services.AddScoped<SyncService>();
 builder.Services.AddHostedService<SyncBackgroundService>();
 
+// ── CORS ───────────────────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
         policy.SetIsOriginAllowed(_ => true)
@@ -31,18 +26,16 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader()
               .AllowCredentials()));
 
+// ── JWT ────────────────────────────────────────────────────────────────────
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "";
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "";
 
 Console.WriteLine($"[Config] Jwt:Key length={jwtKey.Length} | Issuer='{jwtIssuer}' | Audience='{jwtAudience}'");
 
-if (string.IsNullOrWhiteSpace(jwtKey))
-    throw new InvalidOperationException("Jwt:Key missing");
-if (string.IsNullOrWhiteSpace(jwtIssuer))
-    throw new InvalidOperationException("Jwt:Issuer missing");
-if (string.IsNullOrWhiteSpace(jwtAudience))
-    throw new InvalidOperationException("Jwt:Audience missing");
+if (string.IsNullOrWhiteSpace(jwtKey)) throw new InvalidOperationException("Jwt:Key missing");
+if (string.IsNullOrWhiteSpace(jwtIssuer)) throw new InvalidOperationException("Jwt:Issuer missing");
+if (string.IsNullOrWhiteSpace(jwtAudience)) throw new InvalidOperationException("Jwt:Audience missing");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opts =>
@@ -87,17 +80,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Standard authorization — no FallbackPolicy, no RequireAuthenticatedUser
-// [AllowAnonymous] and [Authorize] attributes control access per-endpoint
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
-
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AlumniDbContext>();
-    db.Database.Migrate();
-}
 
 if (app.Environment.IsDevelopment())
 {
@@ -105,11 +90,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// ── MIDDLEWARE ORDER — do not change ──────────────────────────────────────
-app.UseCors("AllowFrontend");   // 1. CORS before everything
-app.UseStaticFiles();           // 2. Static files
-// NO UseHttpsRedirection — it strips Authorization header on redirect
-app.UseAuthentication();        // 3. Identify user
-app.UseAuthorization();         // 4. Check permissions
-app.MapControllers();           // 5. Route to controllers
+// Middleware order — do not change
+app.UseCors("AllowFrontend");
+app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
 app.Run();

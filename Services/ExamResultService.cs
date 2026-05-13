@@ -1,121 +1,69 @@
-﻿using AlumniTrackingAPI.Data;
-using AlumniTrackingAPI.Models;
-using Microsoft.EntityFrameworkCore;
+﻿using AlumniTrackingAPI.Models;
+using System.Text.Json;
 
 namespace AlumniTrackingAPI.Services
 {
     public class ExamResultService
     {
-        private readonly AlumniDbContext _db;
         private readonly GoogleSheetsService _sheets;
 
-        public ExamResultService(AlumniDbContext db, GoogleSheetsService sheets)
+        public ExamResultService(GoogleSheetsService sheets)
         {
-            _db = db;
             _sheets = sheets;
         }
 
-        // ── Public: published results only ───────────────────────────────
         public async Task<List<ExamResult>> GetPublishedAsync()
         {
-            var data = await _db.ExamResults
-                .Where(e => e.IsPublished)
-                .ToListAsync(); // ✅ FETCH FIRST
-
-            return data
+            var all = await _sheets.GetAllExamResultsAsync();
+            return all.Where(e => e.IsPublished)
                 .OrderByDescending(e => e.Year)
-                .ThenBy(e => MonthOrder(e.Month)) // ✅ SAFE NOW
+                .ThenBy(e => MonthOrder(e.Month))
                 .ToList();
         }
 
-        // ── Admin: all results ────────────────────────────────────────────
         public async Task<List<ExamResult>> GetAllAsync()
         {
-            var data = await _db.ExamResults.ToListAsync();
-
-            return data
-                .OrderByDescending(e => e.Year)
-                .ThenBy(e => MonthOrder(e.Month ?? ""))
+            var all = await _sheets.GetAllExamResultsAsync();
+            return all.OrderByDescending(e => e.Year)
+                .ThenBy(e => MonthOrder(e.Month))
                 .ToList();
         }
 
         public async Task<ExamResult?> GetByIdAsync(int id)
-            => await _db.ExamResults.FindAsync(id);
+            => await _sheets.GetExamResultByIdAsync(id);
 
-        // ── Create ────────────────────────────────────────────────────────
         public async Task<ExamResult> CreateAsync(ExamResult result)
-        {
-            result = ComputeFields(result);
-            result.CreatedAt = DateTime.UtcNow;
-            result.UpdatedAt = DateTime.UtcNow;
+            => await _sheets.CreateExamResultAsync(result);
 
-            _db.ExamResults.Add(result);
-            await _db.SaveChangesAsync();
-            return result;
-        }
-
-        // ── Update ────────────────────────────────────────────────────────
         public async Task<ExamResult?> UpdateAsync(int id, ExamResult updated)
         {
-            var existing = await _db.ExamResults.FindAsync(id);
-            if (existing == null) return null;
+            // Merge top passers: manual (from form) + system (from Sheets Awards field)
+            var manualPassers = DeserializeTopPassers(updated.TopNotchers);
+            var systemPassers = new List<TopPasser>();
 
-            existing.Month = updated.Month;
-            existing.Year = updated.Year;
-            existing.DataSource = updated.DataSource;
-            existing.SlsuPassers = updated.SlsuPassers;
-            existing.SlsuExaminees = updated.SlsuExaminees;
-            existing.FirstTimePassers = updated.FirstTimePassers;
-            existing.FirstTimeExaminees = updated.FirstTimeExaminees;
-            existing.RepeaterPassers = updated.RepeaterPassers;
-            existing.RepeaterExaminees = updated.RepeaterExaminees;
-            existing.NationalPassers = updated.NationalPassers;
-            existing.NationalExaminees = updated.NationalExaminees;
-            existing.IsPublished = updated.IsPublished;
-            existing.UpdatedAt = DateTime.UtcNow;
-            existing.TopNotchers = updated.TopNotchers;
+            if (updated.DataSource?.ToLower() == "system")
+                systemPassers = await GetSystemTopPassersAsync(updated.Month, updated.Year);
 
-            existing = ComputeFields(existing);
+            // Merge, deduplicate by name
+            var merged = new List<TopPasser>(systemPassers);
+            foreach (var mp in manualPassers)
+            {
+                if (!merged.Any(s => s.Name.Equals(mp.Name, StringComparison.OrdinalIgnoreCase)))
+                    merged.Add(mp);
+            }
+            merged = merged.OrderBy(p => p.Rank ?? 999).ToList();
+            updated.TopNotchers = JsonSerializer.Serialize(merged);
 
-            await _db.SaveChangesAsync();
-            return existing;
+            return await _sheets.UpdateExamResultAsync(id, updated);
         }
 
         public async Task<bool> TogglePublishedAsync(int id)
-        {
-            var result = await _db.ExamResults.FindAsync(id);
-            if (result == null) return false;
+            => await _sheets.ToggleExamPublishedAsync(id);
 
-            result.IsPublished = !result.IsPublished;
-            result.UpdatedAt = DateTime.UtcNow;
-
-            await _db.SaveChangesAsync();
-            return true;
-        }
-        public static string GenerateNarrative(ExamResult e)
-        {
-            var diff = e.DifferenceFromNational;
-            var direction = diff >= 0 ? "higher" : "lower";
-            var abs = Math.Abs(diff);
-
-            return $"For {e.Month} {e.Year} Mechanical Engineering Licensure Examination, SLSU recorded a passing rate of {e.SlsuPassingRate}%, which consists of {e.SlsuPassers} Passers and a total of {e.SlsuExaminees} examinees. " +
-                    $"The first time takers passing rate is {(e.FirstTimeExaminees == 0 ? 0 :
- Math.Round((double)e.FirstTimePassers / e.FirstTimeExaminees * 100, 2))}%, which consists of {e.FirstTimePassers} passers and a total of {e.FirstTimeExaminees} examinees." +
-                    $"The repeaters passing rate is {(e.RepeaterExaminees == 0 ? 0 :
- Math.Round((double)e.RepeaterPassers / e.RepeaterExaminees * 100, 2))} %.\n"+
-                   $"The {e.Month} {e.Year} Mechanical Engineering Licensure Examination is {abs:F2}% {direction} than the national average of {e.NationalPassingRate}% which consists of {e.NationalPassers} passers over {e.NationalExaminees} examinees).";
-        }
         public async Task<bool> DeleteAsync(int id)
-        {
-            var result = await _db.ExamResults.FindAsync(id);
-            if (result == null) return false;
+            => await _sheets.DeleteExamResultAsync(id);
 
-            _db.ExamResults.Remove(result);
-            await _db.SaveChangesAsync();
-            return true;
-        }
-
-        // ── Pull SLSU data ────────────────────────────────────────────────
+        // ── Pull SLSU data from Alumni sheet ──────────────────────────────
         public async Task<ExamResult> PullFromSystemAsync(string month, int year)
         {
             var allAlumni = await _sheets.GetAllAsync();
@@ -123,6 +71,7 @@ namespace AlumniTrackingAPI.Services
             var takers = allAlumni
                 .Where(a =>
                     a.YearTaken == year.ToString() &&
+                    !string.IsNullOrWhiteSpace(a.MonthTaken) &&
                     a.MonthTaken.Equals(month, StringComparison.OrdinalIgnoreCase) &&
                    (a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase) ||
                     a.PassedLicensureExam.Equals("No", StringComparison.OrdinalIgnoreCase)))
@@ -135,69 +84,118 @@ namespace AlumniTrackingAPI.Services
             var firstTime = takers
                 .Where(a => a.PasserStatus.Equals("First Time Taker", StringComparison.OrdinalIgnoreCase))
                 .ToList();
-
             var repeaters = takers
                 .Where(a => a.PasserStatus.Equals("Repeater", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            return ComputeFields(new ExamResult
+            // Pull top passers from Awards field
+            var systemTopPassers = await GetSystemTopPassersAsync(month, year);
+
+            var result = new ExamResult
             {
                 Month = month,
                 Year = year,
                 DataSource = "System",
                 SlsuPassers = slsuPassers,
                 SlsuExaminees = slsuTotal,
-                FirstTimePassers = firstTime.Count(a => a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase)),
+                FirstTimePassers = firstTime.Count(a =>
+                    a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase)),
                 FirstTimeExaminees = firstTime.Count,
-                RepeaterPassers = repeaters.Count(a => a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase)),
+                RepeaterPassers = repeaters.Count(a =>
+                    a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase)),
                 RepeaterExaminees = repeaters.Count,
                 NationalPassers = 0,
-                NationalExaminees = 0
-            });
+                NationalExaminees = 0,
+                TopNotchers = JsonSerializer.Serialize(systemTopPassers)
+            };
+
+            return result;
+        }
+
+        // ── Generate narrative paragraph ───────────────────────────────────
+        public static string GenerateNarrative(ExamResult e)
+        {
+            double slsuRate = e.SlsuExaminees > 0
+                ? Math.Round((double)e.SlsuPassers / e.SlsuExaminees * 100, 2) : 0;
+            double ftRate = e.FirstTimeExaminees > 0
+                ? Math.Round((double)e.FirstTimePassers / e.FirstTimeExaminees * 100, 2) : 0;
+            double repRate = e.RepeaterExaminees > 0
+                ? Math.Round((double)e.RepeaterPassers / e.RepeaterExaminees * 100, 2) : 0;
+
+            var diff = e.DifferenceFromNational;
+            var direction = diff >= 0 ? "higher" : "lower";
+            var absDiff = Math.Abs(diff);
+
+            return $"For the {e.Month} {e.Year} Mechanical Engineering Licensure Examination, " +
+                   $"SLSU recorded a passing rate of {slsuRate}%, with {e.SlsuPassers} passers " +
+                   $"out of {e.SlsuExaminees} examinees. The first-time takers achieved a " +
+                   $"passing rate of {ftRate}% ({e.FirstTimePassers} out of {e.FirstTimeExaminees}), " +
+                   $"while the repeaters obtained a passing rate of {repRate}% " +
+                   $"({e.RepeaterPassers} out of {e.RepeaterExaminees}). " +
+                   $"The national passing rate was {e.NationalPassingRate}%, with " +
+                   $"{e.NationalPassers:N0} passers out of {e.NationalExaminees:N0} examinees, " +
+                   $"indicating that SLSU's performance was {absDiff:F2} percentage points " +
+                   $"{direction} than the national average.";
         }
 
         // ── Helpers ───────────────────────────────────────────────────────
-        private static ExamResult ComputeFields(ExamResult e)
+        private async Task<List<TopPasser>> GetSystemTopPassersAsync(string month, int year)
         {
-            e.SlsuPassingRate = e.SlsuExaminees > 0
-                ? Math.Round((double)e.SlsuPassers / e.SlsuExaminees * 100, 2) : 0;
-
-            e.FirstTimePassingRate = e.FirstTimeExaminees > 0
-                ? Math.Round((double)e.FirstTimePassers / e.FirstTimeExaminees * 100, 2) : 0;
-
-            e.RepeaterPassingRate = e.RepeaterExaminees > 0
-                ? Math.Round((double)e.RepeaterPassers / e.RepeaterExaminees * 100, 2) : 0;
-
-            e.NationalPassingRate = e.NationalExaminees > 0
-                ? Math.Round((double)e.NationalPassers / e.NationalExaminees * 100, 2) : 0;
-
-            e.DifferenceFromNational =
-                Math.Round(e.SlsuPassingRate - e.NationalPassingRate, 2);
-
-            return e;
-        }
-
-        // ✅ keep this — now safe
-        private static int MonthOrder(string month)
-        {
-            if (string.IsNullOrWhiteSpace(month)) return 99;
-
-            return month.Trim().ToLower() switch
+            try
             {
-                "january" or "jan" => 1,
-                "february" or "feb" => 2,
-                "march" or "mar" => 3,
-                "april" or "apr" => 4,
-                "may" => 5,
-                "june" => 6,
-                "july" => 7,
-                "august" or "aug" => 8,
-                "september" or "sep" or "sept" => 9,
-                "october" or "oct" => 10,
-                "november" or "nov" => 11,
-                "december" or "dec" => 12,
-                _ => 99
-            };
+                var all = await _sheets.GetAllAsync();
+                return all
+                    .Where(a =>
+                        a.YearTaken == year.ToString() &&
+                        !string.IsNullOrWhiteSpace(a.MonthTaken) &&
+                        a.MonthTaken.Equals(month, StringComparison.OrdinalIgnoreCase) &&
+                        a.PassedLicensureExam.Equals("Yes", StringComparison.OrdinalIgnoreCase) &&
+                        !string.IsNullOrWhiteSpace(a.Awards))
+                    .Select(a =>
+                    {
+                        int? rank = null;
+                        var numbers = System.Text.RegularExpressions.Regex
+                            .Match(a.Awards.ToLower(), @"\d+");
+                        if (numbers.Success && int.TryParse(numbers.Value, out var n))
+                            rank = n;
+
+                        return new TopPasser
+                        {
+                            Name = a.FullName,
+                            Rank = rank,
+                            BatchYear = a.YearGraduated ?? year.ToString(),
+                            AwardText = a.Awards
+                        };
+                    })
+                    .OrderBy(p => p.Rank ?? 999)
+                    .ToList();
+            }
+            catch { return new List<TopPasser>(); }
         }
+
+        private static List<TopPasser> DeserializeTopPassers(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json) || json == "[]")
+                return new List<TopPasser>();
+            try { return JsonSerializer.Deserialize<List<TopPasser>>(json) ?? new(); }
+            catch { return new List<TopPasser>(); }
+        }
+
+        private static int MonthOrder(string month) => month.Trim().ToLower() switch
+        {
+            "january" or "jan" => 1,
+            "february" or "feb" => 2,
+            "march" or "mar" => 3,
+            "april" or "apr" => 4,
+            "may" => 5,
+            "june" => 6,
+            "july" => 7,
+            "august" or "aug" => 8,
+            "september" or "sep" => 9,
+            "october" or "oct" => 10,
+            "november" or "nov" => 11,
+            "december" or "dec" => 12,
+            _ => 99
+        };
     }
 }

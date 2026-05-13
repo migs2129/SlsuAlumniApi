@@ -13,7 +13,7 @@ namespace AlumniTrackingAPI.BackgroundServices
         private const int SYNC_INTERVAL_MINUTES = 5;
 
         public SyncBackgroundService(
-            IServiceProvider services,
+            IServiceProvider services, 
             ILogger<SyncBackgroundService> log)
         {
             _services = services;

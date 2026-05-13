@@ -44,5 +44,7 @@
 
         // Topnotchers
         public string? TopNotchers { get; set; }
+
+        public string? TopPassers { get; set; }
     }
 }

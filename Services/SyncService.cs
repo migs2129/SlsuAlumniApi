@@ -1,41 +1,26 @@
-﻿using AlumniTrackingAPI.Data;
-using AlumniTrackingAPI.Models;
-using Microsoft.EntityFrameworkCore;
+﻿using AlumniTrackingAPI.Models;
+using AlumniTrackingAPI.Services;
 
 namespace AlumniTrackingAPI.Services
 {
-    // ── SyncService ───────────────────────────────────────────────────────
-    // Reads new rows from Google Sheets, saves them to SQLite as Pending,
-    // then deletes them from the sheet so only verified data lives there.
-    //
-    // This runs either:
-    //   A) On a timer (background service) — automatic polling every N minutes
-    //   B) On demand via POST /api/sync — admin triggers it manually
+    // SyncService — reads new rows from the Alumni Google Sheet tab,
+    // saves them to the PendingSubmissions tab, then deletes from Alumni tab.
     public class SyncService
     {
         private readonly GoogleSheetsService _sheets;
-        private readonly AlumniDbContext _db;
         private readonly ILogger<SyncService> _log;
 
-        public SyncService(
-            GoogleSheetsService sheets,
-            AlumniDbContext db,
-            ILogger<SyncService> log)
+        public SyncService(GoogleSheetsService sheets, ILogger<SyncService> log)
         {
             _sheets = sheets;
-            _db = db;
             _log = log;
         }
 
-        // ── Main sync method ──────────────────────────────────────────────
-        // Returns how many new rows were moved to pending
         public async Task<SyncResult> SyncFromSheetAsync()
         {
             _log.LogInformation("[Sync] Starting sync from Google Sheets...");
-
             var result = new SyncResult();
 
-            // 1. Get all rows currently in the sheet with their row indexes
             List<(int RowIndex, Alumni Alumni)> rows;
             try
             {
@@ -48,40 +33,26 @@ namespace AlumniTrackingAPI.Services
                 return result;
             }
 
-            _log.LogInformation("[Sync] Found {Count} rows in sheet.", rows.Count);
             result.TotalInSheet = rows.Count;
+            _log.LogInformation("[Sync] Found {Count} rows in sheet.", rows.Count);
 
-            // 2. Get emails already in SQLite (approved or pending) to avoid duplicates.
-            // We match on Email + FullName + YearGraduated as a composite key
-            // since there's no unique ID from Google Forms.
-            var existing = await _db.PendingSubmissions
-                .Select(p => p.Email + "|" + p.FullName + "|" + p.YearGraduated)
-                .ToListAsync();
+            // Get existing pending fingerprints to avoid duplicates
+            var allPending = await _sheets.GetAllPendingAsync();
+            var existingSet = allPending
+                .Select(p => $"{p.Email}|{p.FullName}|{p.YearGraduated}")
+                .ToHashSet();
 
-            var existingSet = existing.ToHashSet();
-
-            // 3. Also check approved alumni already back in the sheet
-            // (we don't want to re-import approved records)
-            // We'll skip rows that match our "approved" fingerprint
-
-            // 4. Process each row — move to SQLite, delete from sheet
-            // IMPORTANT: Delete from highest row index to lowest to avoid
-            // row shifting issues when deleting multiple rows
             var toDelete = new List<(int RowIndex, PendingSubmission Sub)>();
 
             foreach (var (rowIndex, alumni) in rows)
             {
                 var fingerprint = $"{alumni.Email}|{alumni.FullName}|{alumni.YearGraduated}";
-
                 if (existingSet.Contains(fingerprint))
                 {
-                    _log.LogInformation("[Sync] Skipping duplicate: {Name} ({Email})",
-                        alumni.FullName, alumni.Email);
                     result.Skipped++;
                     continue;
                 }
 
-                // Map Alumni → PendingSubmission
                 var pending = new PendingSubmission
                 {
                     FullName = alumni.FullName,
@@ -107,41 +78,25 @@ namespace AlumniTrackingAPI.Services
                     SubmittedAt = DateTime.UtcNow
                 };
 
-                _db.PendingSubmissions.Add(pending);
-                toDelete.Add((rowIndex, pending));
-                existingSet.Add(fingerprint); // prevent duplicates within this batch
+                var saved = await _sheets.AddPendingAsync(pending);
+                toDelete.Add((rowIndex, saved));
+                existingSet.Add(fingerprint);
                 result.Imported++;
             }
 
-            // 5. Save all pending submissions to SQLite first
-            if (toDelete.Count > 0)
+            // Delete from Alumni tab in reverse order to avoid row shifting
+            foreach (var (rowIndex, sub) in toDelete.OrderByDescending(x => x.RowIndex))
             {
-                await _db.SaveChangesAsync();
-                _log.LogInformation("[Sync] Saved {Count} submissions to SQLite.", toDelete.Count);
-
-                // 6. Delete from sheet in REVERSE order (highest index first)
-                // This prevents row shifting from affecting subsequent deletes
-                var deleteOrder = toDelete
-                    .OrderByDescending(x => x.RowIndex)
-                    .ToList();
-
-                foreach (var (rowIndex, sub) in deleteOrder)
+                try
                 {
-                    try
-                    {
-                        await _sheets.DeleteRowAsync(rowIndex);
-                        _log.LogInformation("[Sync] Deleted sheet row {RowIndex} ({Name})",
-                            rowIndex, sub.FullName);
-                        result.Deleted++;
-
-                        // Small delay between deletions to avoid rate limiting
-                        await Task.Delay(300);
-                    }
-                    catch (Exception ex)
-                    {
-                        _log.LogError(ex, "[Sync] Failed to delete row {RowIndex}", rowIndex);
-                        result.DeleteErrors++;
-                    }
+                    await _sheets.DeleteRowAsync(rowIndex);
+                    result.Deleted++;
+                    await Task.Delay(300); // avoid rate limiting
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, "[Sync] Failed to delete row {RowIndex}", rowIndex);
+                    result.DeleteErrors++;
                 }
             }
 
