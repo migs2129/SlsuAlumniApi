@@ -45,7 +45,7 @@ namespace AlumniTrackingAPI.Services
                       ""private_key"": ""{Environment.GetEnvironmentVariable("GOOGLE_PRIVATE_KEY")}"",
                       ""client_email"": ""{Environment.GetEnvironmentVariable("GOOGLE_CLIENT_EMAIL")}"",
                       ""token_uri"": ""https://oauth2.googleapis.com/token""
-                    }}");
+                    }}")
                 .CreateScoped(SheetsService.Scope.Spreadsheets);
 
             _service = new SheetsService(new BaseClientService.Initializer
