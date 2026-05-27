@@ -15,6 +15,7 @@ using Google.Apis.Services;
 using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
 using AlumniTrackingAPI.Models;
+using 
 
 namespace AlumniTrackingAPI.Services
 {
@@ -32,12 +33,19 @@ namespace AlumniTrackingAPI.Services
 
         public GoogleSheetsService(IConfiguration config)
         {
-            var credPath = config["GoogleSheets:CredentialsPath"] ?? "google-credentials.json";
+            
             _spreadsheetId = config["GoogleSheets:SpreadsheetId"] ?? throw new Exception("SpreadsheetId missing");
             _alumniSheet = config["GoogleSheets:SheetName"] ?? TAB_ALUMNI;
 
             var credential = GoogleCredential
-                .FromFile(credPath)
+                .FromJson($@"
+                    {{
+                      ""type"": ""service_account"",
+                      ""project_id"": ""{Environment.GetEnvironmentVariable("GOOGLE_PROJECT_ID")}"" ,
+                      ""private_key"": ""{Environment.GetEnvironmentVariable("GOOGLE_PRIVATE_KEY")}"",
+                      ""client_email"": ""{Environment.GetEnvironmentVariable("GOOGLE_CLIENT_EMAIL")}"",
+                      ""token_uri"": ""https://oauth2.googleapis.com/token""
+                    }}");
                 .CreateScoped(SheetsService.Scope.Spreadsheets);
 
             _service = new SheetsService(new BaseClientService.Initializer
